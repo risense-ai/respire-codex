@@ -1,6 +1,6 @@
 {
   "name": "respire",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Persistent local memory for Codex, powered by rsrs",
   "author": { "name": "risense-ai" },
   "repository": "https://github.com/risense-ai/respire-codex",

@@ -133,5 +133,8 @@ test('visible adoption requires per-record basis/reference/history labels withou
   assert.match(output, /成功读取正文/);
   assert.match(output, /默认在每条用途标签后显示（简短标题）/);
   assert.doesNotMatch(output, /默认不显示标题/);
+  assert.match(output, /不超过24个Unicode字符/);
+  assert.match(output, /英文、数字、空格和标点也逐个计数/);
+  assert.match(output, /不附记录ID、验收编号/);
   assert.match(output, /Memory: unused/);
 });
