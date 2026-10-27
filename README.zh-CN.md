@@ -81,7 +81,7 @@ codex plugin add respire@rsrsai
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -215,27 +215,48 @@ Remove-Item Env:npm_config_prefer_online
 
 感谢 [aaaaaadi/respire-codex 的修复](https://github.com/aaaaaadi/respire-codex/commit/70f4d726c1c97160dd2e0f3afca4c9beb2bc21c1)，本版吸纳并补充了证据保留及成功出口校验。
 
-### 可选的短状态提示（0.2.4）
+### 简短状态提示（0.2.5）
 
-默认保持静默，不要求模型额外输出 `Memory:`、`Used:` 或保存标签。若需要观察记忆使用情况，在启动 Codex 的环境中设置 `RESPIRE_MEMORY_STATUS=1`。PowerShell 示例：
+默认显示 `Memory:`、`Used:` 和上次保存结果。若不需要，在启动 Codex 的环境中设置 `RESPIRE_MEMORY_STATUS=0` 关闭。PowerShell 示例：
 
 ```powershell
-$env:RESPIRE_MEMORY_STATUS = '1'
+$env:RESPIRE_MEMORY_STATUS = '0'
 codex
 ```
 
-不再需要时移除该设置并新建会话；若变量原本已有值，应恢复原值。桌面客户端须从继承此变量的环境启动；插件不修改系统环境。
+移除该设置或改为 `1` 并新建会话即可重新开启；若变量原本已有值，应恢复原值。桌面客户端须从继承此变量的环境启动；插件不修改系统环境。
 
 - `Memory: N found` 只统计实际注入的安全候选；有候选不等于已采用。
-- `Used: 短ID` 是模型在读取正文并认为用于回答后给出的说明，不是插件独立测量的采用证明；用户询问依据时可展开标题。
+- `Used: 短ID [用途]（简短标题）` 默认显示最多24字的简短标题，便于识别实际采用的记忆；无标题或标题敏感时使用相应占位提示。它是模型读取正文并实际采用后的说明，不是插件独立测量的采用证明。
 - 仅有写入回执显示 `unverified`；全部已知写入都实际回读后才显示 `verified`。无上轮回执时省略标签。
 - 后台迟到结果可在后续回合用 `Earlier save` 补报。相同结果最多注入一次；不保证模型已显示或用户已看到。
 - 用户要求严格 JSON、固定格式或只输出指定内容时，提示要求省略所有标签。不会为报告状态增加 Stop 续跑。
-- 开启提示时为状态预留 hook 上下文空间，标题预算为 1,200 字符；默认静默仍为 1,500。
+- 开启提示时为状态预留 hook 上下文空间，标题预算为 1,200 字符；关闭提示时为 1,500。
 
 0.2.4 保留 0.2.3 的大回合原文保护与存储流程。`archive-timeout` 表示后台自身时限到达，`cancelled` 表示父会话取消；模型任务失败的 `archive.failure` 只保留状态、错误类别和可用的 HTTP 状态码，完整上游原因仅留在进程内 `cause`。响应流断连不等于存储成功，未确认结果仍须先查库，不自动重试。
 
-此功能整合自 [PR #1](https://github.com/risense-ai/respire-codex/pull/1)，默认行为按静默要求调整。
+此功能整合自 [PR #1](https://github.com/risense-ai/respire-codex/pull/1)；0.2.5 按用户要求默认显示简短状态，后台 Stop 仍静默执行。
+
+### 日记片段与资料依据（0.2.5）
+
+日记片段要求 **rsrs CLI 1.0.17-dev.9 或具备同等命令的后续版本**，宿主 Runtime 也须支持。旧版受支持引擎仍可使用基础召回和存储。npm `latest` 可能仍是稳定版，测试新接口时须明确选择 dev 版本；新 CLI 的 help 出现命令，不代表正在运行的宿主已更新。
+
+已知引擎限制：dev.9 在多端日记同步冲突后可能将当前正文换回旧版本，原追加内容仍保留在冲突历史中。[CLI #152](https://github.com/risense-ai/respire-cli/pull/152) 已修复该路径，但本插件发布时配套修复 Runtime 尚未公开，本机跨同步持久化复验未完成。写后回读不代表后续同步已收敛；升级修复版后仍须复验，已有冲突需审阅双方正文后单独处理，不自动恢复或重放旧写入。
+
+```sh
+rsrs --version
+rsrs --client-only --json diary-search "项目历史" --mode hybrid --limit 5 --max-chars 4000
+```
+
+- 先查主记忆，仅在追溯历史、主记忆不足或冲突时查日记，不在每轮额外扫描。混合检索的语义准备未完成时使用已有词面结果，不循环等待重建。
+- Runtime 首次准备派生语义索引时，可能显示 `embedder` / `diary-fragments` 进度；这不会改写原记忆。限制返回量不等于消除本地全文扫描成本。
+- 查询最多 500 个 Unicode 标量；插件最多返回 5 条，`details` 序列化预算最多 4000 字符，包含元数据及 JSON 转义，不是 token 数。片段前后各最多一个邻段；空结果且被截断可能是预算不足。
+- 完整保留 `source_id`、`fragment_id`、`source_version`；位置按 Unicode 标量计数，不用 JavaScript UTF-16 下标切片。来源更新后旧定位失效，只读重搜一次再读；能力不支持时不重复调用，也不退回全量日记。
+- 日记保持参考状态；版本指纹、高分及存储回读成功均不认证事实。状态提示默认开启，设置 `RESPIRE_MEMORY_STATUS=0` 可关闭；实际采用的资料逐条标为 `[basis]`、`[ref]`、`[history]`，默认参考；只有过期、被替代或冲突的资料才标历史。
+- 保留原 Stop 流程：召回、完整政策、候选正文、更新或选择 parent、写后回读。仅日记提炼进入主记忆时要求有来源的长期结论；过程仍存 `trivial` 日记，无标题时遵循引擎按日合并规则。
+- CLI 失败只暴露安全类别，如 `diary-unsupported`、`diary-stale`、`runtime-unavailable`。pending 或未确认写入仍须先查库，不自动重试。成功的后台 Stop 保持静默，严格输出格式继续省略状态标签。
+
+本版整合 [PR #2](https://github.com/risense-ai/respire-codex/pull/2)，并适配 [CLI 日记接口约定](https://github.com/risense-ai/respire-cli/blob/main/docs/diary-fragments.md)。
 
 ## 配置、状态与隐私
 

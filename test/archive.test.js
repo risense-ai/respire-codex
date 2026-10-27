@@ -72,6 +72,10 @@ test('archive tools require policy, candidates, real write receipts and readback
   await memory.run({ command: 'show', args: [next] })
   assert.deepEqual(memory.finish(JSON.stringify({ result: 'stored', ids: [id, next] })).records, [id, next])
   assert.deepEqual(memory.finish(JSON.stringify({ result: 'stored', ids: [] })).checkedRecords, [id, next])
+  await memory.run({ command: 'remember', args: ['process diary', '--importance', 'trivial'] })
+  assert.throws(() => memory.finish(JSON.stringify({ result: 'stored', ids: [id, next] })), /archive-unverified/)
+  await memory.run({ command: 'show', args: [next] })
+  assert.deepEqual(memory.finish(JSON.stringify({ result: 'stored', ids: [] })).checkedRecords, [id, next])
 })
 
 test('archive tools reject destructive operations, secrets, plan writes and unconfirmed retries', async () => {
@@ -449,3 +453,40 @@ test('late extraction notifications cannot complete the next extraction before i
   assert.equal(workers,2)
   assert.equal(finalWorkerStarted,false)
 })
+
+test('diary reads are bounded and never count as verified main-memory evidence', async () => {
+  let args
+  const memory = memoryTools(async input => {
+    args = input
+    return input[0].startsWith('diary-')
+      ? { status: 'ok', details: { items: [{ source_id: id, text: '建议切换认证方式', evidence_state: 'reference' }] } }
+      : { status: 'ok', summary: { id } }
+  })
+  for (const command of ['recall', 'prompt']) await memory.run(read(command))
+  const doc = await memory.run({ command: 'diary-search', args: ['认证'] })
+  assert.deepEqual(args, ['diary-search', '认证', '--limit', '5', '--max-chars', '4000', '--mode', 'hybrid'])
+  assert.equal(doc.details.items[0].evidence_state, 'reference')
+  await memory.run({ command: 'diary-fragment', args: [id, 'd1.0.80.full-version-locator'] })
+  assert.deepEqual(args, ['diary-fragment', id, 'd1.0.80.full-version-locator', '--neighbors', '0', '--max-chars', '4000'])
+  await assert.rejects(memory.run(update), /read-before-write/)
+  await memory.run(read('show'))
+  await memory.run(update)
+  await memory.run({ command: 'diary-fragment', args: [id, 'd1.0.80.full-version-locator'] })
+  assert.throws(() => memory.finish(JSON.stringify({ result: 'stored', ids: [id] })), /archive-unverified/)
+  await memory.run(read('show'))
+  assert.deepEqual(memory.finish(JSON.stringify({ result: 'stored', ids: [id] })).records, [id])
+  await memory.run({ command: 'diary-search', args: ['😀'.repeat(500)] })
+  await assert.rejects(memory.run({ command: 'diary-search', args: ['😀'.repeat(501)] }), /bounded-diary-query/)
+  await assert.rejects(memory.run({ command: 'diary-search', args: ['认证', '--max-chars', '999999'] }), /bounded-diary/)
+  await assert.rejects(memory.run({ command: 'diary-fragment', args: [id, 'part', '--neighbors', '99'] }), /bounded-diary/)
+  let calls = 0
+  const unsupported = memoryTools(async () => { calls++; throw new Error('diary-unsupported') })
+  for (const command of ['diary-search', 'diary-fragment']) {
+    await assert.rejects(unsupported.run({ command, args: command === 'diary-search' ? ['认证'] : [id, 'part'] }), /diary-unsupported/)
+  }
+  assert.equal(calls, 1)
+});
+test('unexpected oversized diary responses fail closed instead of flooding model context', async () => {
+  const memory = memoryTools(async () => ({status:'ok',details:{items:[{text:'x'.repeat(9000)}]}}));
+  await assert.rejects(memory.run({command:'diary-search',args:['query']}), /diary-output-too-large/);
+});

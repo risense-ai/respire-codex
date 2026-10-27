@@ -33,7 +33,9 @@ test('status remains silent when disabled and does not consume previous notices'
 
 test('optional hints defer to strict output formats and empty writes stay skipped', async t => {
   const options = await setup(t)
+  delete options.showStatus
   const output = text(await handleHook({ ...base, prompt: '只输出JSON' }, options))
+  assert.match(output, /Memory: 1 found/)
   assert.match(output, /严格JSON/)
   assert.match(output, /省略所有状态标签/)
   const empty = text(await handleHook({ ...base, turn_id: 'empty-write', prompt: '记住：' }, options))
@@ -120,3 +122,16 @@ test('Chinese outcomes from the previous version are not replayed after translat
   })
   assert.doesNotMatch(text(await handleHook(base, options)), /Last save:|Earlier save:/)
 })
+
+test('visible adoption requires per-record basis/reference/history labels without promoting recall or save receipts', async t => {
+  const output = text(await handleHook(base, await setup(t)));
+  assert.match(output, /\[basis\]/);
+  assert.match(output, /\[ref\]/);
+  assert.match(output, /\[history\]/);
+  assert.match(output, /逐条/);
+  assert.match(output, /保存.*不.*可信/);
+  assert.match(output, /成功读取正文/);
+  assert.match(output, /默认在每条用途标签后显示（简短标题）/);
+  assert.doesNotMatch(output, /默认不显示标题/);
+  assert.match(output, /Memory: unused/);
+});

@@ -38,6 +38,17 @@ test('malformed and unavailable executable return category only', async t => {
   const file = await executable(t, { windows: 'Write-Output "password=hidden"', posix: 'console.log("password=hidden")' })
   await assert.rejects(runRsrs([], { executable: file }), /invalid-output/)
   await assert.rejects(runRsrs([], { executable: 'missing-respire-test-executable' }), /unavailable|failed/)
+  for (const [reason, diagnostic, command, expected] of [
+    ['runtime_unavailable', 'password=hidden', 'status', 'runtime-unavailable'],
+    ['invalid_input', "error: unrecognized subcommand 'diary-search'", 'diary-search', 'diary-unsupported'],
+    ['invalid_input', 'stale or unknown fragment; search again before reading', 'diary-fragment', 'diary-stale'],
+    ['request_outcome_unknown', 'password=hidden', 'update', 'request-outcome-unknown'],
+    ['password=hidden', 'password=hidden', 'update', 'failed'],
+  ]) {
+    const json = JSON.stringify({ status: 'fail', summary: { reason }, errors: [diagnostic] })
+    const fixture = await executable(t, { windows: `Write-Output '${json.replaceAll("'", "''")}'; exit 2`, posix: `console.log(${JSON.stringify(json)}); process.exit(2)` })
+    await assert.rejects(runRsrs([command], { executable: fixture }), error => error.message === expected)
+  }
 })
 
 test('pending on nonzero exit is a valid uncommitted result', async t => {

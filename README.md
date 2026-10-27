@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -256,27 +256,48 @@ keep it open until the worker completes.
 
 Thanks to [aaaaaadi/respire-codex's repair](https://github.com/aaaaaadi/respire-codex/commit/70f4d726c1c97160dd2e0f3afca4c9beb2bc21c1); this release incorporates it with original-evidence retention and completion checks.
 
-### Optional short status hints (0.2.4)
+### Short status hints (0.2.5)
 
-The default remains quiet: no extra `Memory:`, `Used:` or save labels are requested. To observe memory use, set `RESPIRE_MEMORY_STATUS=1` in the environment that launches Codex. PowerShell example:
+Short `Memory:`, `Used:` and prior-save hints are enabled by default. Set `RESPIRE_MEMORY_STATUS=0` in the environment that launches Codex to disable them. PowerShell example:
 
 ```powershell
-$env:RESPIRE_MEMORY_STATUS = '1'
+$env:RESPIRE_MEMORY_STATUS = '0'
 codex
 ```
 
-Remove the setting and start a new chat to disable it; restore the previous value if one existed. Desktop clients must inherit the variable at launch. The plugin does not change system environment settings.
+Remove the setting or set it to `1`, then start a new chat to re-enable hints; restore the previous value if one existed. Desktop clients must inherit the variable at launch. The plugin does not change system environment settings.
 
 - `Memory: N found` counts only safe candidates actually injected; candidates do not prove adoption.
-- `Used: short-ID` is the model's statement after reading a record and judging it useful, not independent plugin measurement. Titles can be expanded when requested.
+- `Used: short-ID [role] (short title)` shows a brief title by default, shortened to at most 24 characters; empty or sensitive titles use a neutral placeholder. It is the model's statement after reading and using a record, not independent plugin measurement. Each adopted record is tagged `[basis]`, `[ref]` or `[history]`; the default is reference, not independent fact certification.
 - A write receipt alone is `unverified`; every known write must have an actual readback for `verified`. Omit save labels when no prior receipt exists.
 - Late completion can be reported as `Earlier save`. Each unchanged outcome is injected at most once; this does not acknowledge that the model displayed it or the user saw it.
 - Instructions suppress all labels for strict JSON, fixed formats or exact-output requests. Status reporting does not add a Stop continuation.
-- Hints reserve hook context space: the title budget is 1,200 characters when enabled and remains 1,500 by default.
+- Hints reserve hook context space: the title budget is 1,200 characters when enabled and is 1,500 when hints are disabled.
 
 Version 0.2.4 retains 0.2.3's original-evidence protections and storage workflow. `archive-timeout` identifies the worker's own deadline; `cancelled` identifies parent cancellation. Failed model turns preserve only status, category and an available HTTP code in `archive.failure`; the full upstream cause stays in process memory. A disconnected response stream is not storage confirmation. Inspect memory before retrying any unconfirmed outcome.
 
-Integrated from [PR #1](https://github.com/risense-ai/respire-codex/pull/1), with quiet defaults preserved.
+Integrated from [PR #1](https://github.com/risense-ai/respire-codex/pull/1). Version 0.2.5 enables short hints by default while preserving quiet background Stop execution.
+
+### Diary evidence (0.2.5)
+
+Diary fragments require **rsrs CLI 1.0.17-dev.9 or a later build with the same commands**, plus a host Runtime supporting them. Basic recall and storage remain available on older supported engines. The npm `latest` channel may still be stable; select the development version explicitly when testing these APIs. A new CLI's help output does not prove that the running host was upgraded.
+
+Known engine limitation: dev.9 can replace a current diary with an older canonical version after a multi-device sync conflict; the append remains in conflict history. [CLI #152](https://github.com/risense-ai/respire-cli/pull/152) fixes this path, but its Runtime was not public when this plugin release was prepared, and local cross-sync persistence has not been revalidated. Immediate readback does not prove sync convergence. Revalidate after upgrading the fixed Runtime; review existing conflicts separately rather than automatically restoring or replaying writes.
+
+```sh
+rsrs --version
+rsrs --client-only --json diary-search "project history" --mode hybrid --limit 5 --max-chars 4000
+```
+
+- Main-memory recall remains first. Diary searches are only for history, insufficient main memory or conflicts, not every prompt. Hybrid mode uses available lexical results while semantic preparation is incomplete; it does not wait in a rebuild loop.
+- The Runtime may display `embedder` / `diary-fragments` progress while preparing the derived semantic index. This work does not rewrite original memories. Bounded output does not eliminate local full-text scanning cost.
+- Queries allow at most 500 Unicode scalars. The plugin caps results at 5 and the serialized `details` budget at 4,000 characters, including metadata and JSON escapes; these are not token counts. Fragment reads allow at most one neighbor on either side. Empty truncated output can mean insufficient budget.
+- Keep complete `source_id`, `fragment_id` and `source_version`. Positions are Unicode scalars, not JavaScript UTF-16 indexes. A source update invalidates old locators: search once for a current locator before reading again. Unsupported diary commands are not retried or replaced with whole-diary reads.
+- Diary results remain references. A version fingerprint, high score or successful save/readback does not certify the facts. Status hints are enabled by default and can be disabled with `RESPIRE_MEMORY_STATUS=0`. Adopted records use `[basis]`, `[ref]` or `[history]`, defaulting to `[ref]`; only genuinely outdated, superseded or conflicting material is `[history]`.
+- Preserve the existing Stop workflow: recall, complete policy, candidate reads, update/parent selection and readback. Only promotion from diary to main memory requires a sourced long-term conclusion; process records still use `trivial`. Untitled process diaries follow the engine's daily aggregation policy.
+- CLI failures expose only safe categories, including `diary-unsupported`, `diary-stale` and `runtime-unavailable`. Pending or unconfirmed writes must still be inspected before any retry. Successful background Stop remains quiet; strict-output requests suppress status hints.
+
+Integrated from [PR #2](https://github.com/risense-ai/respire-codex/pull/2), adapted to the [CLI diary contract](https://github.com/risense-ai/respire-cli/blob/main/docs/diary-fragments.md).
 
 ## Configuration, state, and privacy
 

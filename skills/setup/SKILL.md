@@ -9,6 +9,10 @@ engine's current output; don't request passwords or tokens in chat. Let the user
 complete rsrs account/unlock actions interactively. Don't start or change the
 runtime, install the engine, or change credentials without user authorization.
 
+Diary fragments require CLI 1.0.17-dev.9 or a later compatible build and a matching host Runtime. Verify one bounded read-only `diary-search` call with a non-sensitive project term, `--mode hybrid --limit 1 --max-chars 512 --json --client-only`; CLI help alone cannot verify host support. Basic recall/storage stay available without diary support. Distinguish unsupported commands, stale locators, an unavailable host, incomplete semantics and empty truncated output. Do not retrieve whole diaries or poll/rebuild in a loop. Runtime `embedder` / `diary-fragments` progress means derived index preparation; it does not certify retrieval or rewrite original memories.
+
+CLI dev.9 can regress the current diary after a sync conflict; the append remains in conflict history. CLI #152 fixes that path, but verify that its released Runtime is actually deployed before claiming cross-sync persistence. Immediate readback is not convergence. Do not replay confirmed diary writes or resolve existing conflicts automatically.
+
 Confirm this plugin is installed and enabled. Explain that installation alone
 does not trust hooks: the user must review SessionStart, UserPromptSubmit and Stop
 in the Codex hooks UI (`/hooks` in the CLI). Don't bypass trust or disable other

@@ -15,7 +15,7 @@ const textOf = output => output.hookSpecificOutput?.additionalContext ?? ''
 async function fixture(t, call = async () => ({ status: 'ok', details: [hit] })) {
   const dataDir = await mkdtemp(join(tmpdir(), 'respire codex '))
   t.after(() => rm(dataDir, { recursive: true, force: true }))
-  return { dataDir, call, archive: async () => ({ result: 'nothing-to-store', records: [], calls: 2 }) }
+  return { dataDir, call, showStatus: false, archive: async () => ({ result: 'nothing-to-store', records: [], calls: 2 }) }
 }
 
 test('recall injects bounded titles and archives silently only once', async t => {
