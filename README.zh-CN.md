@@ -217,14 +217,11 @@ Remove-Item Env:npm_config_prefer_online
 
 ### 简短状态提示（0.2.5）
 
-默认显示 `Memory:`、`Used:` 和上次保存结果。若不需要，在启动 Codex 的环境中设置 `RESPIRE_MEMORY_STATUS=0` 关闭。PowerShell 示例：
+默认显示 `Memory:`、`Used:` 和上次保存结果。在 Respire 插件的技能列表打开 **respire:settings**，或直接说“设置 Respire 记忆状态显示”，选择显示或隐藏即可。若请求中已明确开启/关闭，设置技能直接应用该选择。
 
-```powershell
-$env:RESPIRE_MEMORY_STATUS = '0'
-codex
-```
+偏好保存在 Codex 用户目录的 `respire/settings.json`（默认 `~/.codex/respire/settings.json`），所有项目共用，插件升级后保留；从下一条用户消息起生效，无须重启。它只控制状态标签，召回、存储、后台收尾及错误诊断继续工作。
 
-移除该设置或改为 `1` 并新建会话即可重新开启；若变量原本已有值，应恢复原值。桌面客户端须从继承此变量的环境启动；插件不修改系统环境。
+已保存的选择优先于旧环境变量；未保存过偏好时，`RESPIRE_MEMORY_STATUS=0` 仍可关闭，默认开启。无需定义新环境变量。此入口是插件设置技能，不是 Codex 原生详情页中的勾选框。
 
 - `Memory: N found` 只统计实际注入的安全候选；有候选不等于已采用。
 - `Used: 短ID [用途]（简短标题）` 默认显示最多24个Unicode字符（英文、数字、空格和标点也计数）的简短标题，便于识别实际采用的记忆；无标题或标题敏感时使用相应占位提示。它是模型读取正文并实际采用后的说明，不是插件独立测量的采用证明。
@@ -252,7 +249,7 @@ rsrs --client-only --json diary-search "项目历史" --mode hybrid --limit 5 --
 - Runtime 首次准备派生语义索引时，可能显示 `embedder` / `diary-fragments` 进度；这不会改写原记忆。限制返回量不等于消除本地全文扫描成本。
 - 查询最多 500 个 Unicode 标量；插件最多返回 5 条，`details` 序列化预算最多 4000 字符，包含元数据及 JSON 转义，不是 token 数。片段前后各最多一个邻段；空结果且被截断可能是预算不足。
 - 完整保留 `source_id`、`fragment_id`、`source_version`；位置按 Unicode 标量计数，不用 JavaScript UTF-16 下标切片。来源更新后旧定位失效，只读重搜一次再读；能力不支持时不重复调用，也不退回全量日记。
-- 日记保持参考状态；版本指纹、高分及存储回读成功均不认证事实。状态提示默认开启，设置 `RESPIRE_MEMORY_STATUS=0` 可关闭；实际采用的资料逐条标为 `[basis]`、`[ref]`、`[history]`，默认参考；只有过期、被替代或冲突的资料才标历史。
+- 日记保持参考状态；版本指纹、高分及存储回读成功均不认证事实。状态提示默认开启，可在 settings 技能中关闭；实际采用的资料逐条标为 `[basis]`、`[ref]`、`[history]`，默认参考；只有过期、被替代或冲突的资料才标历史。
 - 保留原 Stop 流程：召回、完整政策、候选正文、更新或选择 parent、写后回读。仅日记提炼进入主记忆时要求有来源的长期结论；过程仍存 `trivial` 日记，无标题时遵循引擎按日合并规则。
 - CLI 失败只暴露安全类别，如 `diary-unsupported`、`diary-stale`、`runtime-unavailable`。pending 或未确认写入仍须先查库，不自动重试。成功的后台 Stop 保持静默，严格输出格式继续省略状态标签。
 

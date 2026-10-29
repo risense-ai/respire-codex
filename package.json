@@ -1,6 +1,6 @@
 {
   "name": "@rsrsai/codex",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Respire memory hooks for Codex: recall, explicit storage and quiet background memory checks",
   "type": "module",
   "license": "MIT",
@@ -11,7 +11,7 @@
   "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "files": [".codex-plugin", "assets", "hooks", "lib", "skills", "README.md", "LICENSE"],
   "scripts": {
-    "check": "node --check lib/hook.js && node --check lib/memory.js && node --check lib/rsrs.js && node --check lib/state.js && node --check lib/codex.js && node --check lib/archive.js && node --check lib/archive-context.js && node --check lib/visibility.js",
+    "check": "node --check lib/hook.js && node --check lib/memory.js && node --check lib/rsrs.js && node --check lib/state.js && node --check lib/codex.js && node --check lib/archive.js && node --check lib/archive-context.js && node --check lib/visibility.js && node --check lib/settings.js",
     "test": "node --test test/*.test.js",
     "verify:package": "node scripts/check-package.js",
     "release:package": "node scripts/release.js"

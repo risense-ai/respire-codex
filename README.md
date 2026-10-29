@@ -258,14 +258,11 @@ Thanks to [aaaaaadi/respire-codex's repair](https://github.com/aaaaaadi/respire-
 
 ### Short status hints (0.2.5)
 
-Short `Memory:`, `Used:` and prior-save hints are enabled by default. Set `RESPIRE_MEMORY_STATUS=0` in the environment that launches Codex to disable them. PowerShell example:
+Short `Memory:`, `Used:` and prior-save hints are enabled by default. Open **respire:settings** in the Respire plugin skill list, or ask “configure Respire memory status display”, then choose show or hide. An explicit on/off request is applied directly.
 
-```powershell
-$env:RESPIRE_MEMORY_STATUS = '0'
-codex
-```
+Preferences persist in `CODEX_HOME/respire/settings.json` (normally `~/.codex/respire/settings.json`), shared across projects for that Codex profile and retained across plugin upgrades. They apply on the next user turn without restarting Codex. Recall, storage, background archival and necessary error diagnostics remain active.
 
-Remove the setting or set it to `1`, then start a new chat to re-enable hints; restore the previous value if one existed. Desktop clients must inherit the variable at launch. The plugin does not change system environment settings.
+A saved preference overrides the legacy environment variable. Without a saved preference, `RESPIRE_MEMORY_STATUS=0` still disables hints and the default stays on. No new environment variable is required. This is a plugin skill workflow, not a native checkbox on the Codex plugin details page.
 
 - `Memory: N found` counts only safe candidates actually injected; candidates do not prove adoption.
 - `Used: short-ID [role] (short title)` shows a brief title by default, shortened to at most 24 characters; empty or sensitive titles use a neutral placeholder. It is the model's statement after reading and using a record, not independent plugin measurement. Each adopted record is tagged `[basis]`, `[ref]` or `[history]`; the default is reference, not independent fact certification.
@@ -293,7 +290,7 @@ rsrs --client-only --json diary-search "project history" --mode hybrid --limit 5
 - The Runtime may display `embedder` / `diary-fragments` progress while preparing the derived semantic index. This work does not rewrite original memories. Bounded output does not eliminate local full-text scanning cost.
 - Queries allow at most 500 Unicode scalars. The plugin caps results at 5 and the serialized `details` budget at 4,000 characters, including metadata and JSON escapes; these are not token counts. Fragment reads allow at most one neighbor on either side. Empty truncated output can mean insufficient budget.
 - Keep complete `source_id`, `fragment_id` and `source_version`. Positions are Unicode scalars, not JavaScript UTF-16 indexes. A source update invalidates old locators: search once for a current locator before reading again. Unsupported diary commands are not retried or replaced with whole-diary reads.
-- Diary results remain references. A version fingerprint, high score or successful save/readback does not certify the facts. Status hints are enabled by default and can be disabled with `RESPIRE_MEMORY_STATUS=0`. Adopted records use `[basis]`, `[ref]` or `[history]`, defaulting to `[ref]`; only genuinely outdated, superseded or conflicting material is `[history]`.
+- Diary results remain references. A version fingerprint, high score or successful save/readback does not certify the facts. Status hints are enabled by default and can be disabled through the respire:settings skill. Adopted records use `[basis]`, `[ref]` or `[history]`, defaulting to `[ref]`; only genuinely outdated, superseded or conflicting material is `[history]`.
 - Preserve the existing Stop workflow: recall, complete policy, candidate reads, update/parent selection and readback. Only promotion from diary to main memory requires a sourced long-term conclusion; process records still use `trivial`. Untitled process diaries follow the engine's daily aggregation policy.
 - CLI failures expose only safe categories, including `diary-unsupported`, `diary-stale` and `runtime-unavailable`. Pending or unconfirmed writes must still be inspected before any retry. Successful background Stop remains quiet; strict-output requests suppress status hints.
 

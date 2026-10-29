@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { memoryStatus, setMemoryStatus } from '../lib/settings.js'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { handleHook } from '../lib/hook.js'
@@ -13,7 +14,7 @@ const text = output => output.hookSpecificOutput?.additionalContext ?? ''
 async function setup(t, response = { status: 'ok', details: [hit] }) {
   const dataDir = await mkdtemp(join(tmpdir(), 'respire-visibility-'))
   t.after(() => rm(dataDir, { recursive: true, force: true }))
-  return { dataDir, call: async () => response, showStatus: true }
+  return { dataDir, settingsFile: join(dataDir, 'settings.json'), call: async () => response, showStatus: true }
 }
 
 test('status remains silent when disabled and does not consume previous notices', async t => {
@@ -41,6 +42,31 @@ test('optional hints defer to strict output formats and empty writes stay skippe
   const empty = text(await handleHook({ ...base, turn_id: 'empty-write', prompt: '记住：' }, options))
   assert.match(empty, /Save: skipped/)
   assert.doesNotMatch(empty, /Save: verified/)
+  await setMemoryStatus(false, options.settingsFile)
+  assert.equal((await memoryStatus(options.settingsFile)).showMemoryStatus, false)
+  const hidden = text(await handleHook({ ...base, turn_id: 'hidden' }, options))
+  assert.match(hidden, /自动召回/)
+  assert.match(hidden, /本轮不输出Memory/)
+  assert.doesNotMatch(hidden, /可见提示|Memory:|Used:/)
+  const priorEnv = process.env.RESPIRE_MEMORY_STATUS
+  process.env.RESPIRE_MEMORY_STATUS = '0'
+  try {
+    await setMemoryStatus(true, options.settingsFile)
+    assert.match(text(await handleHook({ ...base, turn_id: 'saved-on' }, options)), /Memory: 1 found/)
+    await rm(options.settingsFile)
+    assert.doesNotMatch(text(await handleHook({ ...base, turn_id: 'legacy-off' }, options)), /可见提示/)
+  } finally {
+    if (priorEnv === undefined) delete process.env.RESPIRE_MEMORY_STATUS
+    else process.env.RESPIRE_MEMORY_STATUS = priorEnv
+  }
+  await writeFile(options.settingsFile, '{"showMemoryStatus":"off"}')
+  const invalid = await handleHook({ ...base, turn_id: 'invalid-setting' }, options)
+  assert.match(invalid.systemMessage, /settings-invalid/)
+  assert.match(text(invalid), /自动召回/)
+  await writeFile(options.settingsFile, '{')
+  await assert.rejects(memoryStatus(options.settingsFile), /settings-invalid/)
+  await setMemoryStatus(false, options.settingsFile)
+  assert.equal((await memoryStatus(options.settingsFile)).showMemoryStatus, false)
 })
 test('visible recall counts only safe delivered candidates and distinguishes empty from unavailable', async t => {
   for (const [response, expected] of [

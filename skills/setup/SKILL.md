@@ -3,6 +3,9 @@ name: setup
 description: Check and troubleshoot this Respire Codex plugin's rsrs runtime, installation, and hook activation when the user installs or configures Respire.
 ---
 
+For requests to show or hide Memory/Used/save hints, use the sibling
+[settings skill](../settings/SKILL.md) instead of running engine diagnostics.
+
 Check `rsrs --version` and `rsrs --client-only status --json`. Report missing CLI,
 unavailable host runtime, locked library, or missing login separately. Use the
 engine's current output; don't request passwords or tokens in chat. Let the user
