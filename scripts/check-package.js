@@ -20,6 +20,11 @@ for (const name of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
 const [packed] = JSON.parse(execFileSync(process.execPath, [process.env.npm_execpath, 'pack', '--dry-run', '--ignore-scripts', '--json'], { encoding: 'utf8' }))
 const files = packed.files.map(file => file.path)
 for (const file of ['.codex-plugin/plugin.json', 'hooks/hooks.json', 'lib/hook.js', 'lib/memory.js', 'lib/rsrs.js', 'lib/state.js', 'lib/codex.js', 'lib/archive.js', 'lib/archive-context.js', 'lib/visibility.js', 'skills/setup/SKILL.md', 'README.md', 'LICENSE']) assert.ok(files.includes(file), file)
+for (const field of ['logo', 'logoDark', 'composerIcon', 'composerIconDark']) {
+  const path = plugin.interface[field]
+  assert.ok(typeof path === 'string' && path.startsWith('./assets/'), field)
+  assert.ok(files.includes(path.slice(2)), `${field} must be packaged`)
+}
 assert.ok(!files.includes('plugin.json'), 'Codex 0.163.0 skips hooks from root Agent Plugins manifests')
 assert.ok(files.every(file => !/^(test|scripts|\.verification|node_modules|\.github)\//.test(file)))
 console.log(`Verified ${packed.filename}: ${files.length} files`)
