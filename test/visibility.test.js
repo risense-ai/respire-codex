@@ -24,8 +24,8 @@ test('status remains silent when disabled and does not consume previous notices'
     await save(state)
   })
   const output = text(await handleHook(base, options))
-  assert.match(output, /自动召回/)
-  assert.doesNotMatch(output, /可见提示|Memory:|Used:|save:/)
+  assert.match(output, /auto-recall/)
+  assert.doesNotMatch(output, /visible hints|Memory:|Used:|save:/)
   await withState(options.dataDir, base.session_id, async state => {
     assert.equal(state.visibilityInitialized, undefined)
     assert.equal(state.turns.old.noticeOutcome, undefined)
@@ -37,24 +37,24 @@ test('optional hints defer to strict output formats and empty writes stay skippe
   delete options.showStatus
   const output = text(await handleHook({ ...base, prompt: '只输出JSON' }, options))
   assert.match(output, /Memory: 1 found/)
-  assert.match(output, /严格JSON/)
-  assert.match(output, /省略所有状态标签/)
+  assert.match(output, /strict JSON/)
+  assert.match(output, /omit all status labels/)
   const empty = text(await handleHook({ ...base, turn_id: 'empty-write', prompt: '记住：' }, options))
   assert.match(empty, /Save: skipped/)
   assert.doesNotMatch(empty, /Save: verified/)
   await setMemoryStatus(false, options.settingsFile)
   assert.equal((await memoryStatus(options.settingsFile)).showMemoryStatus, false)
   const hidden = text(await handleHook({ ...base, turn_id: 'hidden' }, options))
-  assert.match(hidden, /自动召回/)
-  assert.match(hidden, /本轮不输出Memory/)
-  assert.doesNotMatch(hidden, /可见提示|Memory:|Used:/)
+  assert.match(hidden, /auto-recall/)
+  assert.match(hidden, /Do not output Memory/)
+  assert.doesNotMatch(hidden, /visible hints|Memory:|Used:/)
   const priorEnv = process.env.RESPIRE_MEMORY_STATUS
   process.env.RESPIRE_MEMORY_STATUS = '0'
   try {
     await setMemoryStatus(true, options.settingsFile)
     assert.match(text(await handleHook({ ...base, turn_id: 'saved-on' }, options)), /Memory: 1 found/)
     await rm(options.settingsFile)
-    assert.doesNotMatch(text(await handleHook({ ...base, turn_id: 'legacy-off' }, options)), /可见提示/)
+    assert.doesNotMatch(text(await handleHook({ ...base, turn_id: 'legacy-off' }, options)), /visible hints/)
   } finally {
     if (priorEnv === undefined) delete process.env.RESPIRE_MEMORY_STATUS
     else process.env.RESPIRE_MEMORY_STATUS = priorEnv
@@ -62,7 +62,7 @@ test('optional hints defer to strict output formats and empty writes stay skippe
   await writeFile(options.settingsFile, '{"showMemoryStatus":"off"}')
   const invalid = await handleHook({ ...base, turn_id: 'invalid-setting' }, options)
   assert.match(invalid.systemMessage, /settings-invalid/)
-  assert.match(text(invalid), /自动召回/)
+  assert.match(text(invalid), /auto-recall/)
   await writeFile(options.settingsFile, '{')
   await assert.rejects(memoryStatus(options.settingsFile), /settings-invalid/)
   await setMemoryStatus(false, options.settingsFile)
@@ -154,13 +154,13 @@ test('visible adoption requires per-record basis/reference/history labels withou
   assert.match(output, /\[basis\]/);
   assert.match(output, /\[ref\]/);
   assert.match(output, /\[history\]/);
-  assert.match(output, /逐条/);
-  assert.match(output, /保存.*不.*可信/);
-  assert.match(output, /成功读取正文/);
-  assert.match(output, /默认在每条用途标签后显示（简短标题）/);
-  assert.doesNotMatch(output, /默认不显示标题/);
-  assert.match(output, /不超过24个Unicode字符/);
-  assert.match(output, /英文、数字、空格和标点也逐个计数/);
-  assert.match(output, /不附记录ID、验收编号/);
+  assert.match(output, /each ID tagged with one usage label/);
+  assert.match(output, /says nothing about source credibility/);
+  assert.match(output, /successfully reading a body/);
+  assert.match(output, /show \(short title\) after each usage label/);
+  assert.doesNotMatch(output, /hide the title by default/);
+  assert.match(output, /at most 24 Unicode characters/);
+  assert.match(output, /counting letters, digits, spaces, and punctuation individually/);
+  assert.match(output, /never append record IDs/);
   assert.match(output, /Memory: unused/);
 });

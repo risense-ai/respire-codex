@@ -14,7 +14,7 @@ follow https://github.com/risense-ai/respire-codex#readme, then perform the
 installation rather than only explaining the steps.
 
 Check Node.js 24+, npm, Git, and Codex plugin/hooks support. Reuse my existing
-rsrs environment; if rsrs is missing, install it with npm install -g @rsrsai/cli@latest.
+rsrs environment; if rsrs is missing, install it with npm install -g rsrs-cli@latest.
 On Windows, check PowerShell 7.3+ for npm/pnpm rsrs wrappers, or configure
 RESPIRE_RSRS_PATH to an existing native rsrs.exe. Run rsrs --version and
 rsrs --client-only status --json. Report any required login, library unlock,
@@ -66,7 +66,7 @@ installation does not create `~/.codex/hooks.json`. Once the hooks are trusted,
 Skip installation if an existing engine already works:
 
 ```sh
-npm install -g @rsrsai/cli@latest
+npm install -g rsrs-cli@latest
 rsrs --version
 rsrs --client-only status --json
 ```

@@ -1,12 +1,12 @@
 ---
 name: settings
-description: Configure whether Respire displays Memory, Used and prior-save hints. 设置 Respire 是否显示记忆使用状态，保存显示或隐藏偏好，不改召回和存储。
+description: Configure whether Respire displays Memory, Used and prior-save hints. Saves the show or hide preference; recall and storage are unchanged.
 ---
 
 Use this skill for Respire display preferences, not engine setup or memory maintenance.
 
 1. Locate the bundled `../../lib/settings.js` relative to this SKILL.md. Run `node "<absolute script path>" status` and read its JSON. Do not guess an installed version, copy the script, or edit Codex config.toml. A `settings-invalid` result can be repaired with the user's explicit on/off choice; for unreadable files, report the error without changing permissions.
-2. If the user already explicitly requested showing or hiding hints, use that choice. Otherwise show the current value and ask the user to choose **显示记忆使用状态** or **隐藏记忆使用状态**. Do not change anything while waiting. Use a choice UI when available; a text answer is sufficient.
+2. If the user already explicitly requested showing or hiding hints, use that choice. Otherwise show the current value and ask the user to choose **show memory status** or **hide memory status**. Do not change anything while waiting. Use a choice UI when available; a text answer is sufficient.
 3. Run `node "<absolute script path>" on` or `off` for the chosen value. Check the exit code and returned JSON, then run `status` again to confirm it was persisted. If the operation fails, report the error and do not claim success.
 4. Briefly confirm the saved value. It applies to subsequent user turns, including new chats, without restarting Codex. Existing text in chat is not removed.
 
