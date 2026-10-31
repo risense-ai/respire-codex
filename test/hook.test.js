@@ -21,7 +21,7 @@ async function fixture(t, call = async () => ({ status: 'ok', details: [hit] }))
 test('recall injects bounded titles and archives silently only once', async t => {
   const calls = []
   const options = await fixture(t, async args => { calls.push(args); return { status: 'ok', details: [hit] } })
-  assert.match(textOf(await handleHook(base, options)), /自动召回.*\n.*12345678/s)
+  assert.match(textOf(await handleHook(base, options)), /auto-recall.*\n.*12345678/s)
   assert.equal(calls[0][0], 'recall')
   const stop = { ...base, hook_event_name: 'Stop', stop_hook_active: false }
   let archives = 0
@@ -38,7 +38,7 @@ test('explicit storage commits once and suppresses reminder', async t => {
   let writes = 0
   const options = await fixture(t, async args => { assert.equal(args[0], 'remember'); writes++; return { status: 'ok', summary: { id: hit.id } } })
   const event = { ...base, prompt: '记住：项目使用TypeScript' }
-  assert.match(textOf(await handleHook(event, options)), /已存/)
+  assert.match(textOf(await handleHook(event, options)), /【respire · stored】/)
   await handleHook(event, options)
   assert.equal(writes, 1)
   assert.deepEqual(await handleHook({ ...event, hook_event_name: 'Stop' }, options), {})
@@ -49,12 +49,12 @@ test('explicit storage commits once and suppresses reminder', async t => {
 
 test('pending is not success; failed write stays unconfirmed and is never retried', async t => {
   const pending = await fixture(t, async () => ({ status: 'pending', items: [{ name: hit.id, value: hit.title }] }))
-  assert.match(textOf(await handleHook({ ...base, prompt: '存：项目约定' }, pending)), /尚未写入/)
+  assert.match(textOf(await handleHook({ ...base, prompt: '存：项目约定' }, pending)), /Nothing was written/)
   let calls = 0
   const failed = await fixture(t, async () => { calls++; throw new Error('password=do-not-echo') })
   const event = { ...base, prompt: '存：项目约定' }
   const output = textOf(await handleHook(event, failed))
-  assert.match(output, /未确认/)
+  assert.match(output, /unconfirmed/)
   assert.doesNotMatch(output, /do-not-echo/)
   await handleHook(event, failed)
   assert.equal(calls, 1)
@@ -68,7 +68,7 @@ test('secret, skip, empty, plan and paused inputs do not write', async t => {
   }
   await handleHook({ ...base, turn_id: 'plan', permission_mode: 'plan', prompt: '记：项目约定' }, options)
   assert.equal(calls, 0)
-  assert.match(textOf(await handleHook({ ...base, turn_id: 'paused', prompt: '记：项目约定' }, options)), /未存/)
+  assert.match(textOf(await handleHook({ ...base, turn_id: 'paused', prompt: '记：项目约定' }, options)), /not stored/)
   assert.deepEqual(await handleHook({ ...base, turn_id: 'paused', hook_event_name: 'Stop' }, options), {})
 })
 
@@ -98,11 +98,11 @@ test('SessionStart restores rules on startup, resume, compact and fork, reports 
   const options = await fixture(t, async () => ({ status: 'ok', summary: { unlocked: false, session: { has_session: false } } }))
   for (const source of ['startup', 'resume', 'compact', 'fork']) {
     const output = textOf(await handleHook({ ...base, hook_event_name: 'SessionStart', source }, options))
-    assert.match(output, /记忆层/)
-    assert.match(output, /未解锁/)
-    assert.match(output, /尚未登录/)
+    assert.match(output, /memory layer/)
+    assert.match(output, /locked/)
+    assert.match(output, /Not signed in/)
   }
-  assert.match(textOf(await handleHook({ ...base, hook_event_name: 'SessionStart' }, { call: async () => { throw Error('secret') } })), /runtime不可用/)
+  assert.match(textOf(await handleHook({ ...base, hook_event_name: 'SessionStart' }, { call: async () => { throw Error('secret') } })), /runtime unavailable/)
 })
 
 test('invalid input, missing data and corrupt state fail without writing memories', async t => {
