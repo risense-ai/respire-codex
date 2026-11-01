@@ -234,6 +234,101 @@ test('store receipts follow the result-state contract (warn written, pending rel
   assert.ok(racedElapsed < 6000, `receipt took ${racedElapsed}ms`)
 })
 
+test('read-back show combines the budget signal with the host cancel signal', async t => {
+  process.env.RESPIRE_HOOK_BUDGET_MS = '30000'
+  t.after(() => { delete process.env.RESPIRE_HOOK_BUDGET_MS })
+  // Host cancel while the read-back is executing: the combined signal must abort the
+  // hanging show immediately instead of waiting out the remaining budget.
+  const controller = new AbortController()
+  const signals = []
+  const cancelling = await fixture(t, async (args, options = {}) => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') {
+      signals.push(options.signal)
+      return new Promise((resolve, reject) => options.signal?.addEventListener('abort', () => reject(new Error('cancelled'))))
+    }
+    return { status: 'ok', details: [hit] }
+  })
+  const event = { ...base, turn_id: 'host-cancel-turn', prompt: 'remember: confirmed fact' }
+  const pending = handleHook(event, { ...cancelling, signal: controller.signal })
+  await new Promise(resolve => setTimeout(resolve, 200))
+  assert.equal(signals.length, 1, 'show must have started')
+  assert.ok(!signals[0].aborted, 'the read-back signal must still be live before the host cancel')
+  controller.abort()
+  const started = Date.now()
+  const text = textOf(await pending)
+  const elapsed = Date.now() - started
+  assert.match(text, /Saved: /)
+  assert.match(text, /Read-back unavailable/)
+  assert.ok(elapsed < 1000, `receipt took ${elapsed}ms after the host cancel; the hanging show was not aborted by it`)
+  // Host already cancelled before the read-back starts: show either never runs or is
+  // aborted instantly — the receipt is kept either way.
+  const already = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') return new Promise((resolve, reject) => reject(new Error('cancelled')))
+    return { status: 'ok', details: [hit] }
+  })
+  const preCancelled = textOf(await handleHook({ ...base, turn_id: 'pre-cancelled-turn', prompt: 'remember: confirmed fact' }, { ...already, signal: AbortSignal.abort() }))
+  assert.match(preCancelled, /Saved: /)
+  assert.match(preCancelled, /Read-back unavailable/)
+})
+
+test('malformed receipt ids keep the store unconfirmed and never verify', async t => {
+  // Pure-hyphen placeholder id (the old /^[a-f\d-]{8,}$/ accepted it): ok/warn branches
+  // must fall through to store-unconfirmed, never Saved, and no read-back may run.
+  for (const status of ['ok', 'warn']) {
+    let calls = 0
+    const options = await fixture(t, async args => { calls++; return { status, summary: { id: '--------' } } })
+    const text = textOf(await handleHook({ ...base, turn_id: `hyphen-${status}`, prompt: 'remember: hyphen fact' }, options))
+    assert.match(text, /store unconfirmed/, status)
+    assert.doesNotMatch(text, /Saved/)
+    assert.equal(calls, 1, `${status}: a malformed id must not trigger the read-back show`)
+  }
+  // Numeric summary.id is not a native string: no Saved, no read-back.
+  let numericCalls = 0
+  const numeric = await fixture(t, async args => { numericCalls++; return { status: 'ok', summary: { id: 12345678 } } })
+  const numericText = textOf(await handleHook({ ...base, turn_id: 'numeric-id', prompt: 'remember: numeric fact' }, numeric))
+  assert.match(numericText, /store unconfirmed/)
+  assert.doesNotMatch(numericText, /Saved/)
+  assert.equal(numericCalls, 1)
+  // Read-back with a correct summary but a wrong entry.id is a mismatch, not verified.
+  const stranger = '99999999-9999-9999-9999-999999999999'
+  const entryIdDrift = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') return { status: 'ok', summary: { id: hit.id }, details: { entry: { id: 'DIFFERENT', title: 'confirmed fact', content: 'confirmed fact' } } }
+    return { status: 'ok', details: [hit] }
+  })
+  const driftText = textOf(await handleHook({ ...base, turn_id: 'entry-id-drift', prompt: 'remember: confirmed fact' }, entryIdDrift))
+  assert.doesNotMatch(driftText, /Write verified/)
+  assert.match(driftText, /DIFFERENT/)
+  // Missing entry.id (id: undefined) likewise cannot verify.
+  const noEntryId = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') return { status: 'ok', summary: { id: hit.id }, details: { entry: { title: 'confirmed fact', content: 'confirmed fact' } } }
+    return { status: 'ok', details: [hit] }
+  })
+  const noEntryIdText = textOf(await handleHook({ ...base, turn_id: 'no-entry-id', prompt: 'remember: confirmed fact' }, noEntryId))
+  assert.doesNotMatch(noEntryIdText, /Write verified/)
+  assert.match(noEntryIdText, /DIFFERENT|Read-back unavailable/)
+  // A native-string UUID entry.id matching the target still verifies (no false negative).
+  const good = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') return { status: 'ok', summary: { id: hit.id }, details: { entry: { id: hit.id, title: 'confirmed fact', content: 'confirmed fact' } } }
+    return { status: 'ok', details: [hit] }
+  })
+  assert.match(textOf(await handleHook({ ...base, turn_id: 'entry-id-good', prompt: 'remember: confirmed fact' }, good)), /Write verified by read-back/)
+})
+
+test('validId accepts only canonical UUIDs or 16+ char hex strings', async () => {
+  const { validId } = await import('../lib/memory.js')
+  for (const bad of ['--------', 12345678, null, undefined, {}, 'short', 'abcd-1234-xyz-', '12345678-1234-1234-1234-12345678901z']) {
+    assert.equal(validId(bad), false, String(bad))
+  }
+  for (const good of [hit.id, 'abcdef0123456789', 'ABCDEF0123456789', 'f'.repeat(60)]) {
+    assert.equal(validId(good), true, String(good))
+  }
+})
+
 test('packaged command runs through the real platform shell with spaces in PLUGIN_ROOT', async t => {
   const options = await fixture(t)
   const { cp } = await import('node:fs/promises')
@@ -295,7 +390,9 @@ if (args.includes('remember')) {
   })
   const first = await run()
   assert.equal(first.code, 0, `stdout: ${first.stdout}`)
-  assert.ok(first.elapsed < 10000, `the hook process exited after ${first.elapsed}ms; the shared budget is 8000ms`)
+  // The budget is 8000ms: the hook must exit inside the budget plus output/cleanup margin,
+  // not merely under the 20s child timeout — the 10s bound of round 2 let a budget overrun pass.
+  assert.ok(first.elapsed < 9000, `the hook process exited after ${first.elapsed}ms; the shared budget is 8000ms`)
   assert.match(first.stdout, new RegExp(`Saved: ${id}`))
   assert.match(first.stdout, /Read-back unavailable/)
   const log = await readFile(markers, 'utf8')
@@ -316,6 +413,88 @@ if (args.includes('remember')) {
   assert.equal(second.code, 0, `stdout: ${second.stdout}`)
   assert.match(second.stdout, /duplicate event/)
   assert.equal((await readFile(markers, 'utf8')).split('\n').filter(line => line === 'remember').length, 1)
+})
+
+test('host cancel during the read-back ends the hook run promptly (real child)', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'respire hostcancel '))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const { cp, mkdir, writeFile, chmod } = await import('node:fs/promises')
+  const dataDir = join(root, 'plugin data')
+  const pluginRoot = join(root, 'plugin root')
+  const markers = join(root, 'markers.log')
+  const id = '12345678-1234-1234-1234-123456789012'
+  await mkdir(dataDir, { recursive: true })
+  await cp('lib', join(pluginRoot, 'lib'), { recursive: true })
+  await cp('package.json', join(pluginRoot, 'package.json'))
+  // Stub engine: remember commits after ~500ms; show hangs ~30s (past every bound in this test).
+  await writeFile(join(root, 'engine.js'), `#!/usr/bin/env node
+const { appendFileSync } = require('node:fs')
+const args = process.argv.slice(2)
+if (args.includes('remember')) {
+  appendFileSync(process.env.STUB_MARKERS, 'remember\\n')
+  setTimeout(() => { process.stdout.write(JSON.stringify({ status: 'ok', summary: { id: '${id}' } }) + '\\n'); process.exit(0) }, 500)
+} else if (args.includes('show')) {
+  appendFileSync(process.env.STUB_MARKERS, 'show ' + process.pid + '\\n')
+  setTimeout(() => { process.stdout.write('{"status":"ok"}\\n'); process.exit(0) }, 30000)
+}
+`)
+  const executable = process.platform === 'win32' ? join(root, 'engine.ps1') : join(root, 'engine.js')
+  if (process.platform === 'win32') {
+    const quote = value => value.replaceAll("'", "''")
+    await writeFile(executable, `& '${quote(process.execPath)}' '${quote(join(root, 'engine.js'))}' @args\nexit $LASTEXITCODE\n`)
+  } else await chmod(executable, 0o700)
+  const hooks = JSON.parse(await readFile('hooks/hooks.json', 'utf8'))
+  const command = hooks.hooks.UserPromptSubmit[0].hooks[0].command
+  const input = JSON.stringify({ session_id: 'cancel-session', turn_id: 'cancel-turn', cwd: process.cwd(), prompt: 'remember: host-cancel fact', hook_event_name: 'UserPromptSubmit' })
+  const env = { ...process.env, PLUGIN_ROOT: pluginRoot, PLUGIN_DATA: dataDir, RESPIRE_HOOK_BUDGET_MS: '30000', RESPIRE_RSRS_PATH: executable, STUB_MARKERS: markers }
+  // The read-back must honor a host cancel mid-show, exactly as a real SIGINT/SIGTERM would.
+  // POSIX: /bin/sh -c execs the single hooks.json command directly, so a genuine SIGTERM to the
+  // exec child lands on the hook process and main's SIGTERM listener aborts the controller.
+  // Windows: cross-process signal delivery cannot reach a spawned child's listeners
+  // (child.kill is TerminateProcess), so the cancel is raised in-process via
+  // process.emit('SIGINT') — the same EventEmitter event main() registers for — after show
+  // is already in flight.
+  const posix = process.platform !== 'win32'
+  const { spawn } = await import('node:child_process')
+  const run = () => new Promise((resolveRun, rejectRun) => {
+    const started = Date.now()
+    let stdout = ''
+    let child
+    if (posix) {
+      child = exec(command, { shell: '/bin/sh', env, windowsHide: true, timeout: 20000, killSignal: 'SIGTERM' })
+      child.stdout.on('data', data => { stdout += data })
+      setTimeout(() => child.kill('SIGTERM'), 2000)
+    } else {
+      // The hooks.json script (quote-stripped) with a cancel timer layered on: main()
+      // starts immediately, then the host-cancel event fires while the read-back show hangs.
+      const stripped = command.replace(/^node\s+-e\s+/, '').trim().replaceAll('\\"', '"')
+      const inner = stripped.startsWith('"') && stripped.endsWith('"') ? stripped.slice(1, -1) : stripped
+      const script = `${inner}; setTimeout(() => process.emit('SIGINT'), 2000)`
+      child = spawn(process.execPath, ['-e', script], { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+      child.stdout.setEncoding('utf8')
+      child.stdout.on('data', data => { stdout += data })
+      child.stderr.resume()
+    }
+    child.on('error', rejectRun)
+    child.stdin.end(input)
+    child.on('close', (code, signal) => resolveRun({ code, signal, stdout, elapsed: Date.now() - started }))
+  })
+  const result = await run()
+  // The hook must end promptly once the host cancel lands mid-read-back — not at the 30s budget.
+  assert.ok(result.elapsed < 10000, `the hook run ended after ${result.elapsed}ms (signal ${result.signal}, code ${result.code}); the host cancel was not relayed to the read-back`)
+  assert.match(result.stdout, new RegExp(`Saved: ${id}`), `stdout: ${result.stdout}`)
+  const log = await readFile(markers, 'utf8')
+  assert.equal(log.split('\n').filter(line => line === 'remember').length, 1)
+  const showPid = Number(log.match(/^show (\d+)$/m)?.[1])
+  assert.ok(Number.isInteger(showPid) && showPid > 0, 'the read-back show child must have started before the cancel')
+  await new Promise(resolveSleep => setTimeout(resolveSleep, 1000))
+  if (process.platform === 'win32') {
+    const { execFile } = await import('node:child_process')
+    const list = await new Promise(resolveList => execFile('tasklist.exe', ['/NH', '/FI', `PID eq ${showPid}`], { windowsHide: true }, (error, stdout) => resolveList(error ? '' : String(stdout))))
+    assert.doesNotMatch(list, new RegExp(`\\s${showPid}\\s`), `show child ${showPid} is still alive after the host cancel`)
+  } else {
+    assert.throws(() => process.kill(showPid, 0), error => error.code === 'ESRCH', `show child ${showPid} is still alive after the host cancel`)
+  }
 })
 
 test('successful zero-match recall still archives once, paused and errors do not', async t => {

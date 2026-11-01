@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.15 — 复审整改（第四轮）：宿主取消贯通回读＋严格 id 契约＋entry.id 三方核验（PR #7 review round 4）
+
+### Fixed
+
+- **宿主取消覆盖回读 show（复审 P2#1）**：回读信号原为纯 `AbortSignal.timeout(remaining)`，宿主 signal（SIGINT/SIGTERM→main 的 AbortController）没有参与——show 执行中宿主取消只能等预算耗尽才结束。现在 `show` 在 `AbortSignal.any([hostSignal, timeoutSignal])` 下运行：宿主取消在 show 执行中即时终止回读（rsrs 执行器照旧杀整棵子进程树后 reject `cancelled`，回执降级 `Read-back unavailable` 且 Saved 不被吞），宿主信号 already-aborted（show 启动前已取消）同样即时生效。单元测试：宿主取消后 <1s 内出回执；集成测试（POSIX 经 `/bin/sh -c` 真实 SIGTERM；Windows 以 `process.emit('SIGINT')`——同一 EventEmitter 事件——注入取消）断言 hook 及时退出且 show 子进程树已终止。
+- **严格 id 契约（复审 P2#3，zcode/dimcode 终案同款）**：`validId` 从宽松的 `^[a-f\d-]{8,}$`（纯 `--------` 也过）收紧为 `/^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i`（规范 UUID 或 16+ 位 hex），并保持原生字符串校验（数字 id 不强转）——`storeText` 的 ok/warn 分支对 `summary.id` 走同一校验，畸形 id 不再进 Saved 而落入 store unconfirmed（unknown、禁自动重发），回读 show 也不会为坏 id 发起。回读核验升级为三方一致：`summary.id` 与 `details.entry.id` 均须为原生字符串且都 `===` 目标 id（summary 正确但 entry.id 为 `DIFFERENT` 或缺失 → mismatch 而非 verified）；title/content 的严格字符串检查保留。
+- **POSIX 集成 stub shebang＋断言收紧（复审 P2#2，远端 CI 41299193766 已红）**：0.2.14 的集成测试已在引擎 stub 第一行补 `#!/usr/bin/env node`（POSIX chmod 后直接 exec，无 shebang 即 ENOEXEC → remember 失败 → 回执落 unconfirmed，Saved 正则断言必红）；本轮把预算断言同步收紧为 <9s（预算 8s＋清理余量），不再靠 <10s 放宽取得绿勾。
+- 双 manifest（package.json 与 .codex-plugin/plugin.json）同步 bump 0.2.15。
+
 ## 0.2.14 — 复审整改（第二轮）：回读 show 由真实可中断子信号约束（PR #7 review round 2）
 
 ### Fixed
