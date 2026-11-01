@@ -1,15 +1,31 @@
 {
   "name": "@rsrsai/codex",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "Respire memory hooks for Codex: recall, explicit storage and quiet background memory checks",
   "type": "module",
   "license": "MIT",
   "author": "risense-ai",
-  "repository": { "type": "git", "url": "https://github.com/risense-ai/respire-codex.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/risense-ai/respire-codex.git"
+  },
   "homepage": "https://github.com/risense-ai/respire-codex#readme",
-  "engines": { "node": ">=24" },
-  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
-  "files": [".codex-plugin", "assets", "hooks", "lib", "skills", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "files": [
+    ".codex-plugin",
+    "assets",
+    "hooks",
+    "lib",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "check": "node --check lib/hook.js && node --check lib/memory.js && node --check lib/rsrs.js && node --check lib/state.js && node --check lib/codex.js && node --check lib/archive.js && node --check lib/archive-context.js && node --check lib/visibility.js && node --check lib/settings.js",
     "test": "node --test test/*.test.js",

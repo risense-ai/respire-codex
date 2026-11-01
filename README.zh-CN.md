@@ -161,7 +161,7 @@ Remove-Item Env:npm_config_prefer_online
 | --- | --- |
 | 新建、恢复、清空、fork 或压缩后的 SessionStart | 注入记忆工作规则，检查引擎状态 |
 | 普通用户输入 | 同步 `recall --titles --json`，最多 5 条、1500 字符标题；按需读取正文 |
-| `记：`、`存：`、`记录：`、`记住：`、`remember:` | 尝试 remember 一次，返回成功、待决或未确认回执 |
+| `记：`、`存：`、`记录：`、`记住：`、`remember:` | 尝试 remember 一次，回执按结果状态契约：`ok`/`warn` 且带有效 id = **已写入**（warn 附引擎警告——绝不误报失败、绝不引导重发），随后 `show` 写后回读核验（verified / mismatch / unavailable 如实标注）；`pending` = 未写入，转述候选 id＋引擎建议动作（改＞并＞挂＞存）；超时/坏回执 = 未确认——只读核实，禁止自动重试 |
 | `/nomem` 或 `#nomem` 加空格 | 跳过该输入的自动召回；不改变记忆库模式，收尾检查仍可运行 |
 | Stop | 符合条件的回合最多启动一次后台记忆检查；显式存储成功时不启动 |
 

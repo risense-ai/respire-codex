@@ -74,7 +74,11 @@ test('secret, skip, empty, plan and paused inputs do not write', async t => {
 
 test('sessions are isolated and concurrent duplicate writes do not commit twice', async t => {
   let writes = 0
-  const options = await fixture(t, async () => { writes++; await new Promise(resolve => setTimeout(resolve, 100)); return { status: 'ok', summary: { id: hit.id } } })
+  const options = await fixture(t, async args => {
+    if (args[0] === 'remember') writes++  // 回读的 show 不计入写入
+    await new Promise(resolve => setTimeout(resolve, 100))
+    return { status: 'ok', summary: { id: hit.id } }
+  })
   const event = { ...base, prompt: 'remember: confirmed fact' }
   await Promise.all([handleHook(event, options), handleHook(event, options)])
   assert.equal(writes, 1)
@@ -123,6 +127,48 @@ test('title budgets, malformed envelopes and credential heuristics', () => {
   assert.equal(recallText({ status: 'ok', details: [{ ...hit, title: 'password=hidden' }] }), '')
   assert.ok(recallText({ status: 'ok', details: Array(10).fill(hit) }).length <= 1500)
   assert.equal(storeText({ status: 'ok' }).stored, false)
+})
+
+test('store receipts follow the result-state contract (warn written, pending relays actions, read-back)', async t => {
+  // warn + valid id = WRITTEN after commit (unresolvable parent etc.) — never a failure, never a re-send
+  const warned = storeText({ status: 'warn', summary: { id: hit.id }, errors: ['parent (cause) cannot be resolved; stored independently'] })
+  assert.equal(warned.stored, true)
+  assert.match(warned.text, /Saved with warnings/)
+  assert.match(warned.text, /parent \(cause\) cannot be resolved/)
+  assert.match(warned.text, /do not send the same record again/)
+  // pending keeps engine-suggested actions (merge > attach > new), not just parent/force
+  const pending = storeText({ status: 'pending', items: [{ name: 'aaaabbbb', value: 'similarity=88% title=stub candidate' }], actions: ['rsrs remember "<combined content>" --merge-ids "aaaabbbb"', 'rsrs remember "<content>" --force to write as new entry'] })
+  assert.equal(pending.stored, false)
+  assert.match(pending.text, /Nothing was written/)
+  assert.match(pending.text, /aaaabbbb: similarity=88%/)
+  assert.match(pending.text, /--merge-ids/)
+  assert.match(pending.text, /--force/)
+  // E2E through the hook: a warn write is verified by read-back; show is the second engine call
+  const calls = []
+  const options = await fixture(t, async args => {
+    calls.push(args[0])
+    if (args[0] === 'remember') return { status: 'warn', summary: { id: hit.id }, errors: ['parent (cause) cannot be resolved; stored independently'] }
+    if (args[0] === 'show') return { status: 'ok', summary: { id: hit.id }, details: { entry: { id: hit.id, title: 'confirmed fact', content: 'confirmed fact' } } }
+    return { status: 'ok', details: [hit] }
+  })
+  const text = textOf(await handleHook({ ...base, prompt: 'remember: confirmed fact' }, options))
+  assert.match(text, /Saved with warnings/)
+  assert.match(text, /Write verified by read-back/)
+  assert.deepEqual(calls, ['remember', 'show'])
+  // read-back mismatch is reported honestly
+  const bad = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') return { status: 'ok', summary: { id: hit.id }, details: { entry: { id: hit.id, title: 'drifted', content: 'drifted' } } }
+    return { status: 'ok', details: [hit] }
+  })
+  assert.match(textOf(await handleHook({ ...base, turn_id: 'mismatch-turn', prompt: 'remember: confirmed fact' }, bad)), /DIFFERENT title\/content/)
+  // read-back failure degrades to unavailable, never blocks the receipt
+  const blind = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') throw new Error('timeout')
+    return { status: 'ok', details: [hit] }
+  })
+  assert.match(textOf(await handleHook({ ...base, turn_id: 'blind-turn', prompt: 'remember: confirmed fact' }, blind)), /Read-back unavailable/)
 })
 
 test('packaged command runs through the real platform shell with spaces in PLUGIN_ROOT', async t => {
