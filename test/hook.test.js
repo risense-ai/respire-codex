@@ -461,7 +461,11 @@ if (args.includes('remember')) {
     let stdout = ''
     let child
     if (posix) {
-      child = exec(command, { shell: '/bin/sh', env, windowsHide: true, timeout: 20000, killSignal: 'SIGTERM' })
+      // /bin/sh -c on ubuntu (dash) does not exec single commands: child.kill(SIGTERM)
+      // would kill only the shell while the node grandchild runs to the exec timeout.
+      // Spawn node directly so the SIGTERM lands on the hook process itself.
+      child = spawn(process.execPath, ['-e', command.replace(/^node\s+-e\s+/, '').trim().replaceAll('\\"', '"')], { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+      child.stdout.setEncoding('utf8')
       child.stdout.on('data', data => { stdout += data })
       setTimeout(() => child.kill('SIGTERM'), 2000)
     } else {
