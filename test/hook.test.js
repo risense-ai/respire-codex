@@ -161,7 +161,7 @@ test('store receipts follow the result-state contract (warn written, pending rel
     if (args[0] === 'show') return { status: 'ok', summary: { id: hit.id }, details: { entry: { id: hit.id, title: 'drifted', content: 'drifted' } } }
     return { status: 'ok', details: [hit] }
   })
-  assert.match(textOf(await handleHook({ ...base, turn_id: 'mismatch-turn', prompt: 'remember: confirmed fact' }, bad)), /DIFFERENT title\/content/)
+  assert.match(textOf(await handleHook({ ...base, turn_id: 'mismatch-turn', prompt: 'remember: confirmed fact' }, bad)), /DIFFERENT id, title or content/)
   // read-back failure degrades to unavailable, never blocks the receipt
   const blind = await fixture(t, async args => {
     if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
@@ -169,6 +169,67 @@ test('store receipts follow the result-state contract (warn written, pending rel
     return { status: 'ok', details: [hit] }
   })
   assert.match(textOf(await handleHook({ ...base, turn_id: 'blind-turn', prompt: 'remember: confirmed fact' }, blind)), /Read-back unavailable/)
+  // wrong id: show returns a different entry — a title/body match alone must not verify
+  const stranger = '99999999-9999-9999-9999-999999999999'
+  const wrongId = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') return { status: 'ok', summary: { id: stranger }, details: { entry: { id: stranger, title: 'confirmed fact', content: 'confirmed fact' } } }
+    return { status: 'ok', details: [hit] }
+  })
+  const wrongIdText = textOf(await handleHook({ ...base, turn_id: 'wrong-id-turn', prompt: 'remember: confirmed fact' }, wrongId))
+  assert.match(wrongIdText, /DIFFERENT/)
+  assert.doesNotMatch(wrongIdText, /Write verified/)
+  // same first 40 chars but a tampered tail is a DIFFERENT body, not a verified one
+  const long = 'f'.repeat(60)
+  const tampered = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') return { status: 'ok', summary: { id: hit.id }, details: { entry: { id: hit.id, title: long, content: `${long}TAMPERED` } } }
+    return { status: 'ok', details: [hit] }
+  })
+  const tamperedText = textOf(await handleHook({ ...base, turn_id: 'tampered-turn', prompt: `remember: ${long}` }, tampered))
+  assert.match(tamperedText, /DIFFERENT/)
+  assert.doesNotMatch(tamperedText, /Write verified/)
+  // missing body (entry.content undefined) is never verified
+  const noBody = await fixture(t, async args => {
+    if (args[0] === 'remember') return { status: 'ok', summary: { id: hit.id } }
+    if (args[0] === 'show') return { status: 'ok', summary: { id: hit.id }, details: { entry: { id: hit.id, title: 'confirmed fact' } } }
+    return { status: 'ok', details: [hit] }
+  })
+  const noBodyText = textOf(await handleHook({ ...base, turn_id: 'no-body-turn', prompt: 'remember: confirmed fact' }, noBody))
+  assert.doesNotMatch(noBodyText, /Write verified/)
+  assert.match(noBodyText, /DIFFERENT|Read-back unavailable/)
+  // slow remember + hanging show under a tight budget: the read-back is not even started
+  // and the receipt still returns within the budget (never waits for the hanging show)
+  process.env.RESPIRE_HOOK_BUDGET_MS = '4000'
+  t.after(() => { delete process.env.RESPIRE_HOOK_BUDGET_MS })
+  const slowCalls = []
+  const slow = await fixture(t, async args => {
+    slowCalls.push(args[0])
+    if (args[0] === 'remember') { await new Promise(resolve => setTimeout(resolve, 2000)); return { status: 'ok', summary: { id: hit.id } } }
+    if (args[0] === 'show') return new Promise(() => {}) // would hang ~10s in reality
+    return { status: 'ok', details: [hit] }
+  })
+  let started = Date.now()
+  const slowText = textOf(await handleHook({ ...base, turn_id: 'slow-turn', prompt: 'remember: confirmed fact' }, slow))
+  const slowElapsed = Date.now() - started
+  assert.match(slowText, /Read-back unavailable/)
+  assert.ok(!slowCalls.includes('show'), 'a too-small remaining budget must not start the read-back')
+  assert.ok(slowElapsed < 6000, `receipt took ${slowElapsed}ms`)
+  // budget still allows starting show: the race guard fires and returns unavailable without the show
+  process.env.RESPIRE_HOOK_BUDGET_MS = '7000'
+  const raceCalls = []
+  const raced = await fixture(t, async args => {
+    raceCalls.push(args[0])
+    if (args[0] === 'remember') { await new Promise(resolve => setTimeout(resolve, 2000)); return { status: 'ok', summary: { id: hit.id } } }
+    if (args[0] === 'show') return new Promise(() => {}) // hangs; the race must not wait for it
+    return { status: 'ok', details: [hit] }
+  })
+  started = Date.now()
+  const racedText = textOf(await handleHook({ ...base, turn_id: 'race-turn', prompt: 'remember: confirmed fact' }, raced))
+  const racedElapsed = Date.now() - started
+  assert.match(racedText, /Read-back unavailable/)
+  assert.ok(raceCalls.includes('show'))
+  assert.ok(racedElapsed < 6000, `receipt took ${racedElapsed}ms`)
 })
 
 test('packaged command runs through the real platform shell with spaces in PLUGIN_ROOT', async t => {

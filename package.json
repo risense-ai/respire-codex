@@ -1,6 +1,6 @@
 {
   "name": "@rsrsai/codex",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "Respire memory hooks for Codex: recall, explicit storage and quiet background memory checks",
   "type": "module",
   "license": "MIT",
