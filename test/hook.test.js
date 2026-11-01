@@ -464,7 +464,9 @@ if (args.includes('remember')) {
       // /bin/sh -c on ubuntu (dash) does not exec single commands: child.kill(SIGTERM)
       // would kill only the shell while the node grandchild runs to the exec timeout.
       // Spawn node directly so the SIGTERM lands on the hook process itself.
-      child = spawn(process.execPath, ['-e', command.replace(/^node\s+-e\s+/, '').trim().replaceAll('\\"', '"')], { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+      const strippedCmd = command.replace(/^node\s+-e\s+/, '').trim().replaceAll('\\"', '"')
+      const innerCmd = strippedCmd.startsWith('"') && strippedCmd.endsWith('"') ? strippedCmd.slice(1, -1) : strippedCmd
+      child = spawn(process.execPath, ['-e', innerCmd], { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
       child.stdout.setEncoding('utf8')
       child.stdout.on('data', data => { stdout += data })
       setTimeout(() => child.kill('SIGTERM'), 2000)
