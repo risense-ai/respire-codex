@@ -262,7 +262,9 @@ test('packaged read-back aborts its slow child tree and exits inside the shared 
   await cp('lib', join(pluginRoot, 'lib'), { recursive: true })
   await cp('package.json', join(pluginRoot, 'package.json'))
   // Slow stub engine: remember commits after ~1s; show hangs ~15s, far past the shared budget.
-  await writeFile(join(root, 'engine.js'), `const { appendFileSync } = require('node:fs')
+  // POSIX 直接 exec 该脚本：必须带 shebang，否则 ENOEXEC → remember 失败 → unconfirmed（Linux/macOS CI 红的根因）
+  await writeFile(join(root, 'engine.js'), `#!/usr/bin/env node
+const { appendFileSync } = require('node:fs')
 const args = process.argv.slice(2)
 if (args.includes('remember')) {
   appendFileSync(process.env.STUB_MARKERS, 'remember\\n')
