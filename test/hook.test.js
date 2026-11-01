@@ -215,13 +215,15 @@ test('store receipts follow the result-state contract (warn written, pending rel
   assert.match(slowText, /Read-back unavailable/)
   assert.ok(!slowCalls.includes('show'), 'a too-small remaining budget must not start the read-back')
   assert.ok(slowElapsed < 6000, `receipt took ${slowElapsed}ms`)
-  // budget still allows starting show: the race guard fires and returns unavailable without the show
+  // budget still allows starting show: the read-back signal aborts the executor and the
+  // receipt returns unavailable without waiting for the hung show any longer
   process.env.RESPIRE_HOOK_BUDGET_MS = '7000'
   const raceCalls = []
-  const raced = await fixture(t, async args => {
+  const raced = await fixture(t, async (args, options = {}) => {
     raceCalls.push(args[0])
     if (args[0] === 'remember') { await new Promise(resolve => setTimeout(resolve, 2000)); return { status: 'ok', summary: { id: hit.id } } }
-    if (args[0] === 'show') return new Promise(() => {}) // hangs; the race must not wait for it
+    // hangs until the signal aborts it, exactly like a real runRsrs child
+    if (args[0] === 'show') return new Promise((resolve, reject) => options.signal?.addEventListener('abort', () => reject(new Error('cancelled'))))
     return { status: 'ok', details: [hit] }
   })
   started = Date.now()
@@ -246,6 +248,72 @@ test('packaged command runs through the real platform shell with spaces in PLUGI
   child.stdin.end(input)
   await new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(Error(`exit ${code}`))) })
   assert.equal(stdout.trim(), '')
+})
+
+test('packaged read-back aborts its slow child tree and exits inside the shared budget', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'respire readback '))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const { cp, mkdir, writeFile, chmod } = await import('node:fs/promises')
+  const dataDir = join(root, 'plugin data')
+  const pluginRoot = join(root, 'plugin root')
+  const markers = join(root, 'markers.log')
+  const id = '12345678-1234-1234-1234-123456789012'
+  await mkdir(dataDir, { recursive: true })
+  await cp('lib', join(pluginRoot, 'lib'), { recursive: true })
+  await cp('package.json', join(pluginRoot, 'package.json'))
+  // Slow stub engine: remember commits after ~1s; show hangs ~15s, far past the shared budget.
+  await writeFile(join(root, 'engine.js'), `const { appendFileSync } = require('node:fs')
+const args = process.argv.slice(2)
+if (args.includes('remember')) {
+  appendFileSync(process.env.STUB_MARKERS, 'remember\\n')
+  setTimeout(() => { process.stdout.write(JSON.stringify({ status: 'ok', summary: { id: '${id}' } }) + '\\n'); process.exit(0) }, 1000)
+} else if (args.includes('show')) {
+  appendFileSync(process.env.STUB_MARKERS, 'show ' + process.pid + '\\n')
+  setTimeout(() => { process.stdout.write('{"status":"ok"}\\n'); process.exit(0) }, 15000)
+}
+`)
+  // RESPIRE_RSRS_PATH is a single path: on Windows a .ps1 wrapper forwards to the node stub.
+  const executable = process.platform === 'win32' ? join(root, 'engine.ps1') : join(root, 'engine.js')
+  if (process.platform === 'win32') {
+    const quote = value => value.replaceAll("'", "''")
+    await writeFile(executable, `& '${quote(process.execPath)}' '${quote(join(root, 'engine.js'))}' @args\nexit $LASTEXITCODE\n`)
+  } else await chmod(executable, 0o700)
+  const hooks = JSON.parse(await readFile('hooks/hooks.json', 'utf8'))
+  const command = hooks.hooks.UserPromptSubmit[0].hooks[0].command
+  const input = JSON.stringify({ session_id: 'budget-session', turn_id: 'budget-turn', cwd: process.cwd(), prompt: 'remember: slow read-back fact', hook_event_name: 'UserPromptSubmit' })
+  const env = { ...process.env, PLUGIN_ROOT: pluginRoot, PLUGIN_DATA: dataDir, RESPIRE_HOOK_BUDGET_MS: '8000', RESPIRE_RSRS_PATH: executable, STUB_MARKERS: markers }
+  const run = () => new Promise((resolveRun, rejectRun) => {
+    const started = Date.now()
+    const child = exec(command, { shell: process.platform === 'win32' ? 'powershell.exe' : '/bin/sh', env, windowsHide: true, timeout: 20000 })
+    let stdout = ''
+    child.stdout.on('data', data => { stdout += data })
+    child.stdin.end(input)
+    child.on('error', rejectRun)
+    child.on('close', code => resolveRun({ code, stdout, elapsed: Date.now() - started }))
+  })
+  const first = await run()
+  assert.equal(first.code, 0, `stdout: ${first.stdout}`)
+  assert.ok(first.elapsed < 10000, `the hook process exited after ${first.elapsed}ms; the shared budget is 8000ms`)
+  assert.match(first.stdout, new RegExp(`Saved: ${id}`))
+  assert.match(first.stdout, /Read-back unavailable/)
+  const log = await readFile(markers, 'utf8')
+  assert.equal(log.split('\n').filter(line => line === 'remember').length, 1)
+  const showPid = Number(log.match(/^show (\d+)$/m)?.[1])
+  assert.ok(Number.isInteger(showPid) && showPid > 0, 'the slow read-back show child must have started')
+  // The aborted read-back child (whole tree) must be terminated: no leftover child past the receipt.
+  await new Promise(resolveSleep => setTimeout(resolveSleep, 1000))
+  if (process.platform === 'win32') {
+    const { execFile } = await import('node:child_process')
+    const list = await new Promise(resolveList => execFile('tasklist.exe', ['/NH', '/FI', `PID eq ${showPid}`], { windowsHide: true }, (error, stdout) => resolveList(error ? '' : String(stdout))))
+    assert.doesNotMatch(list, new RegExp(`\\s${showPid}\\s`), `show child ${showPid} is still alive after the hook exited`)
+  } else {
+    assert.throws(() => process.kill(showPid, 0), error => error.code === 'ESRCH', `show child ${showPid} is still alive after the hook exited`)
+  }
+  // Replaying the same turn must not re-run remember (duplicate event path, no second write).
+  const second = await run()
+  assert.equal(second.code, 0, `stdout: ${second.stdout}`)
+  assert.match(second.stdout, /duplicate event/)
+  assert.equal((await readFile(markers, 'utf8')).split('\n').filter(line => line === 'remember').length, 1)
 })
 
 test('successful zero-match recall still archives once, paused and errors do not', async t => {

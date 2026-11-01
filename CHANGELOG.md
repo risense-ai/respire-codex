@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.14 — 复审整改（第二轮）：回读 show 由真实可中断子信号约束（PR #7 review round 2）
+
+### Fixed
+
+- **race→abort signal（复审 P2）**：`Promise.race`+guard 定时器只限制 `handleHook` 的等待，不终止真实子进程——show 子进程＋执行器 20s 定时器＋pipe 会把 hook 进程拖到宿主 30s 之外（复审复现：慢 remember 18s＋挂起 show 时旧码 hook 进程存活 ~38.9s）。现在回读改为 `execute(['show', id], { signal: AbortSignal.timeout(remaining - 500) })`：信号触发时 rsrs 执行器终止整棵子进程树（Windows `taskkill /PID <pid> /T /F`，失败回退 `child.kill()`；POSIX `kill(-pid, SIGKILL)` 回退 `child.kill()`），close 处理清理 20s 定时器与 abort 监听器并 reject `cancelled`，hook 归为 `Read-back unavailable` 回执后在预算内自然退出（同场景新码 ~27.6s/预算 30s；测试场景 8s 预算 ~5.5s 退出），Saved 回执不被吞；宿主取消传播（SIGINT/SIGTERM→main 的 AbortController→remember 路径）保持不变；`AbortSignal.timeout` 的内部定时器不保持事件循环。
+- **集成测试（真实子进程，经实际打包入口）**：临时 stub engine（Windows 经 `.ps1` wrapper 包 node 慢脚本、POSIX 直接 shebang 脚本：remember ~1s 成功、show ~15s 挂起），`RESPIRE_HOOK_BUDGET_MS=8000`，执行 `hooks/hooks.json` 里 UserPromptSubmit 的真实 command（含带空格的 PLUGIN_ROOT）：断言 hook 进程 <10s 退出、exit code 0、stdout 回执含 Saved 与 Read-back unavailable、show 子进程 PID 已终止（Windows `tasklist`／POSIX `kill(pid,0)` ESRCH）、同 turn 重放 remember 仅调用一次（duplicate event 回执）。
+- 单元测试同步改用尊重 `options.signal` 的桩（abort 时 reject，模拟真实 runRsrs 子进程），不再注入永不 settle 的裸 Promise。
+
 ## 0.2.13 — 复审整改：回读共享宿主预算＋全文核验（PR #7 review）
 
 ### Fixed
