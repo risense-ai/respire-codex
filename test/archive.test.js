@@ -14,7 +14,7 @@ const next = '87654321-4321-4321-4321-210987654321'
 const read = command => ({ command, args: command === 'show' ? [id] : command === 'recall' ? ['project', '--titles', '--json'] : [] })
 const update = { command: 'update', args: [id, '--title', '项目验收已通过', '--content', '【前因】验收。【行为】核对。【后果】通过。'] }
 async function prime(memory) {
-  for (const command of ['recall', 'prompt', 'show']) await memory.run(read(command))
+  for (const command of ['agent-config', 'recall', 'prompt', 'show']) await memory.run(read(command))
 }
 
 test('worker failures preserve the original cause and only safe diagnostic fields', async () => {
@@ -50,6 +50,17 @@ test('the internal deadline is distinct from cancellation by the parent', async 
   })
   t.mock.timers.tick(280000)
   await assert.rejects(work, /archive-timeout/)
+})
+
+test('archive writes require a successful agent-config read first (CX-02 hard precondition)', async () => {
+  const memory = memoryTools(async () => ({ status: 'ok', summary: { id } }))
+  // recall/prompt/show alone no longer unlock writes — the mode check is executor-enforced
+  for (const command of ['recall', 'prompt', 'show']) await memory.run(read(command))
+  await assert.rejects(memory.run(update), /mode-unconfirmed/)
+  await memory.run(read('agent-config'))
+  await memory.run(update)
+  await memory.run(read('show'))
+  assert.deepEqual(memory.finish(JSON.stringify({ result: 'stored', ids: [id] })).records, [id])
 })
 
 test('archive tools require policy, candidates, real write receipts and readback', async () => {
@@ -272,7 +283,7 @@ function segmentedFixture(items, { failExtraction = false, abortDuringExtraction
                   assert.equal(response.success,true)
                 }
               }
-              for(const command of ['recall','prompt','show']){
+              for(const command of ['agent-config','recall','prompt','show']){
                 const result=await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
                 assert.equal(result.success,true)
               }
@@ -304,7 +315,7 @@ test('oversized dialogue is extracted without memory access then archived once',
   assert.ok(fixture.settings.length>2)
   assert.ok(fixture.settings.slice(0,-1).every(x=>x.dynamicTools.length===0))
   assert.equal(fixture.settings.at(-1).dynamicTools[0].name,'respire_memory')
-  assert.deepEqual(fixture.memoryCalls,['recall','prompt','show'])
+  assert.deepEqual(fixture.memoryCalls,['agent-config','recall','prompt','show'])
   assert.equal(result.result,'already-stored')
   assert.ok(result.context.chunks>1)
   assert.equal(result.context.extractedChunks,result.context.chunks)
@@ -360,7 +371,7 @@ test('segmented archival requires original long user evidence before writing', a
           if(settings.dynamicTools.length===0)final=JSON.stringify({facts:[],constraints:[]})
           else{
             finalPayload=JSON.parse(params.input[0].text.split('\n').slice(1).join('\n'))
-            for(const command of ['recall','prompt','show'])await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
+            for(const command of ['agent-config','recall','prompt','show'])await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
             const blocked=await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:update}})
             assert.equal(blocked.success,false)
             assert.match(blocked.contentItems[0].text,/read-user-evidence-before-write/)
@@ -405,7 +416,7 @@ test('archive cancellation reaches an in-flight memory command', async () => {
       if(method==='thread/turns/list')return {data:[{id:'t',items:params.itemsView==='full'?[{type:'agentMessage',text:'confirmed fact'}]:[]}],nextCursor:null}
       if(method==='thread/start')return {thread:{id:'w'}}
       if(method==='turn/start'){
-        for(const command of ['recall','prompt','show'])await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
+        for(const command of ['agent-config','recall','prompt','show'])await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
         await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:update}})
       }
       return {}
@@ -462,7 +473,7 @@ test('diary reads are bounded and never count as verified main-memory evidence',
       ? { status: 'ok', details: { items: [{ source_id: id, text: '建议切换认证方式', evidence_state: 'reference' }] } }
       : { status: 'ok', summary: { id } }
   })
-  for (const command of ['recall', 'prompt']) await memory.run(read(command))
+  for (const command of ['agent-config', 'recall', 'prompt']) await memory.run(read(command))
   const doc = await memory.run({ command: 'diary-search', args: ['认证'] })
   assert.deepEqual(args, ['diary-search', '认证', '--limit', '5', '--max-chars', '4000', '--mode', 'hybrid'])
   assert.equal(doc.details.items[0].evidence_state, 'reference')
