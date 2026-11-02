@@ -14,7 +14,7 @@
 然后实际执行安装，不要只解释步骤。
 
 检查 Node.js 24+、npm、Git 和 Codex plugins/hooks 支持。复用现有 rsrs 环境；
-仅在未安装 rsrs 时运行 npm install -g @rsrsai/cli@latest。
+仅在未安装 rsrs 时运行 npm install -g rsrs-cli@latest。
 Windows 使用 npm/pnpm rsrs 包装器时检查 PowerShell 7.3+，或将 RESPIRE_RSRS_PATH
 配置为已有的原生 rsrs.exe。运行 rsrs --version 和 rsrs --client-only status --json。
 若需要登录、解锁记忆库、配置模型或处理宿主 runtime，请指出具体待办，让我在 rsrs 中完成；
@@ -56,7 +56,7 @@ hooks 审核信任后，由 `SessionStart` 注入记忆规则，无需单独保�
 已有可用环境可跳过安装：
 
 ```sh
-npm install -g @rsrsai/cli@latest
+npm install -g rsrs-cli@latest
 rsrs --version
 rsrs --client-only status --json
 ```
