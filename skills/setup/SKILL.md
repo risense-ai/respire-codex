@@ -17,9 +17,16 @@ Diary fragments require CLI 1.0.17-dev.9 or a later compatible build and a match
 CLI dev.9 can regress the current diary after a sync conflict; the append remains in conflict history. CLI #152 fixes that path, but verify that its released Runtime is actually deployed before claiming cross-sync persistence. Immediate readback is not convergence. Do not replay confirmed diary writes or resolve existing conflicts automatically.
 
 Confirm this plugin is installed and enabled. Explain that installation alone
-does not trust hooks: the user must review SessionStart, UserPromptSubmit and Stop
-in the Codex hooks UI (`/hooks` in the CLI). Don't bypass trust or disable other
-hooks. After plugin changes, restart the client and use a new chat to verify it.
+does not trust hooks: the user MUST personally review and trust all four hooks,
+SessionStart, UserPromptSubmit, Stop, and PreToolUse, in the Codex hooks UI
+(`/hooks` in the CLI). An untrusted PreToolUse does not execute; its write guard
+is inactive. DO NOT change hook trust, bypass trust, or disable other hooks on
+the user's behalf. Report untrusted or unknown trust status as a required user
+action; DO NOT claim the write guard is active. The CLI 0.166.0 checks used a
+one-time trust bypass in an isolated fixture, not the user's installation.
+After plugin changes, restart the client and use a new chat to verify it.
+Recall alone does not verify PreToolUse; check its activity during a storage
+test ONLY AFTER the user trusts the hook and approves the fact to save.
 
 Version 0.2.0 keeps Stop but checks memory in an ephemeral background Codex task.
 It reuses the current model/provider and login, consuming additional model usage.

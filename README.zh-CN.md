@@ -27,7 +27,8 @@ codex plugin add respire@rsrsai
 插件本体使用 npm 包，不使用 Git 包依赖。保留现有记忆库、账号配置、AGENTS.md 和其他 hooks。
 
 确认 Respire 已安装且启用。告诉我何时重启 Codex，并打开 /hooks 亲自审核和信任
-SessionStart、UserPromptSubmit、Stop，不得绕过 hooks 信任审核。
+SessionStart、UserPromptSubmit、Stop、PreToolUse 四个 hooks。
+PreToolUse 未被信任时不会执行；不得替我修改或绕过 hooks 信任。
 插件 setup 技能可用时运行检查。重启和审核后，在新对话中验证召回；
 先向我要一条无敏感内容的测试事实，再验证存储及其实际记录。
 在另一个召回成功且未显式存储成功的回合验证后台 Stop，核对状态和实际记忆回执。
@@ -95,8 +96,10 @@ codex plugin add respire@rsrsai
 ### 3. 审核 hooks 并启用
 
 重启 Codex，在插件界面确认 Respire 已启用。打开 hooks 管理（CLI 使用 `/hooks`），
-审核并信任本插件的 `SessionStart`、`UserPromptSubmit`、`Stop`。
-插件安装或升级后，新增或变更的 hooks 仍需用户审核，不能跳过。
+由用户亲自审核并信任本插件的 `SessionStart`、`UserPromptSubmit`、`Stop`、`PreToolUse` 四个 hooks。
+插件安装或升级后，新增或变更的 hooks 仍需用户亲自审核。
+`PreToolUse` 未被信任时不会执行，因此写入防护尚未生效。代理不得替用户修改或绕过信任。
+CLI 0.166.0 的防护验收使用了隔离测试环境中的单次信任绕过；该测试不代表用户的安装已获信任。
 运行 setup 技能可检查环境。用新对话测试已知项目的召回；用明确允许保存的事实测试存储。
 
 已有 `rsrs inject` 写入的 AGENTS.md 或其他记忆 hooks 不会被插件自动删除。
@@ -141,10 +144,12 @@ Remove-Item Env:npm_config_prefer_online
 
 ### 用新会话验收
 
-1. 在 `/hooks` 确认 Respire 三个 hooks 均已列出并信任。
+1. 在 `/hooks` 确认 Respire 的 `SessionStart`、`UserPromptSubmit`、`Stop`、`PreToolUse`
+   四个 hooks 均已列出，并已由用户亲自信任。
 2. 新建对话，询问已有记忆中的事实，查看 SessionStart 和 UserPromptSubmit 活动。
    仅安装成功或手动运行 `rsrs recall` 不能证明这条链路可用。
-3. 保存一条明确允许保存的测试事实，核对记录 ID，再开另一个新对话召回它，验证跨会话持久化。
+3. 保存一条明确允许保存的测试事实，并检查 `PreToolUse` 活动；仅召回成功不能证明写入防护生效。
+   核对记录 ID，再开另一个新对话召回它，验证跨会话持久化。
 4. 另用一个召回成功、没有显式存储成功的回合，等待后台 Stop 完成。
    核对 `PLUGIN_DATA/sessions/` 中该回合的 `archive` 状态，并读取其中的实际写入 ID。
    0.2.0 不应产生 `Blocked by hook` 或重复收尾提示；旧聊天可能在重启客户端前继续使用 0.1.x 阻断 hook。
