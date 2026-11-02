@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.20
+
+- Correct installation and setup guidance to list all four hooks, including PreToolUse. Users MUST personally trust new or changed hooks; an untrusted PreToolUse does not execute. Agents MUST NOT change or bypass that trust.
+- Distinguish the isolated CLI 0.166.0 guard checks from trust in a user's installation. Recall alone does not verify the write guard. Guard implementation and hook configuration remain unchanged.
+
 ## 0.2.19
 
 - Background updates MUST preserve importance; reject both option forms even after a verified diary read. Ordinary update and trivial creation paths remain available.

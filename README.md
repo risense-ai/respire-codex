@@ -34,8 +34,9 @@ Use the npm package, not a Git package dependency. Do not replace my memory
 library, account configuration, AGENTS.md, or other existing hooks.
 
 Verify that Respire is installed and enabled. Tell me when to restart Codex
-and open /hooks to personally review and trust SessionStart, UserPromptSubmit,
-and Stop; do not bypass hook trust. Run the plugin's setup skill when available.
+and open /hooks to personally review and trust all four hooks: SessionStart,
+UserPromptSubmit, Stop, and PreToolUse. PreToolUse does not run while untrusted.
+DO NOT change or bypass hook trust on my behalf. Run the plugin's setup skill when available.
 After restart and trust review, verify recall in a new chat. Ask me for a
 non-sensitive test fact before testing storage, and verify the resulting record.
 Verify the background Stop worker in a separate turn with successful recall
@@ -114,8 +115,12 @@ includes its runtime files, has no runtime dependencies, and needs no install sc
 
 Restart Codex and confirm that Respire is enabled in the plugin interface.
 Open hook management (`/hooks` in the CLI), then review and trust the plugin's
-`SessionStart`, `UserPromptSubmit`, and `Stop` hooks. New or changed hooks after
-installation or an upgrade still require user review; this cannot be bypassed.
+four hooks: `SessionStart`, `UserPromptSubmit`, `Stop`, and `PreToolUse`.
+The user MUST personally review and trust new or changed hooks after installation
+or an upgrade. An untrusted `PreToolUse` does not execute, so its write guard
+is inactive. Agents MUST NOT change hook trust or bypass it on the user's behalf.
+The CLI 0.166.0 guard checks used a one-time trust bypass in an isolated fixture;
+that test does not establish trust for the user's installation.
 Run the setup skill to check the environment. In a new conversation, test recall
 for a known project and test storage with a fact explicitly approved for saving.
 
@@ -167,11 +172,13 @@ not an upgrade. There is no need to uninstall the plugin or delete its state.
 
 ### Check a new session
 
-1. Confirm all three Respire hooks appear in `/hooks` and are trusted.
+1. Confirm all four Respire hooks (`SessionStart`, `UserPromptSubmit`, `Stop`,
+   and `PreToolUse`) appear in `/hooks` and the user has trusted them.
 2. Open a new chat and ask about a known stored fact. Check hook activity for
    SessionStart and UserPromptSubmit; installing the plugin or directly running
    `rsrs recall` does not verify this path.
-3. Save an approved test fact, verify its record ID, then open another new chat
+3. Save an approved test fact and check `PreToolUse` activity; recall alone does
+   not verify the write guard. Verify its record ID, then open another new chat
    and ask for it to check persistence across sessions.
 4. In a separate successful recall turn without an explicit successful write,
    let the background Stop worker finish. Check the turn's `archive` state under
