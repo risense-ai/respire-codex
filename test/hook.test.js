@@ -126,6 +126,8 @@ test('invalid input, missing data and corrupt state fail without writing memorie
     'rsrs 2>/dev/null remember fact', 'rsrs 2>&1 remember fact', 'echo $(rsrs remember fact)', 'echo "$(rsrs remember fact)"',
     'rsrs remember fact --importance trivial --merge-ids A,B',
     'npx rsrs remember fact', 'command -- rsrs remember fact', 'env -- rsrs remember fact',
+    "bash -c 'rsrs remember fact --force'", "bash -lc 'rsrs remember fact --force'",
+    "pwsh -NoProfile -NonInteractive -Command 'rsrs remember fact --force'", 'echo `rsrs remember fact --force`',
     'rsrs --model-task-id audit remember fact', 'rsrs --progress-id=audit remember fact',
     'rsrs remember "fact" --force=false --parent ' + parent,
     'rsrs update ' + parent + ' --clear-parent', 'rsrs update ' + parent + ' --clear-parent=true',
@@ -135,7 +137,9 @@ test('invalid input, missing data and corrupt state fail without writing memorie
   ]) assert.equal((await pre(command)).hookSpecificOutput?.permissionDecision, 'deny', command)
   assert.equal(requests.length, 0)
   for (const command of [
-    'echo "rsrs remember --force"', "echo '$(rsrs remember fact)'", 'rsrs recall "--force --parent=fake"', 'rsrs remember --help',
+    'echo "rsrs remember --force"', "echo '$(rsrs remember fact)'", "echo '`rsrs remember fact --force`'",
+    "bash -c 'echo \"rsrs remember fact --force\"'", "bash -c 'rsrs recall remember --titles --json'",
+    "pwsh -Command 'rsrs recall remember --titles --json'", 'rsrs recall "--force --parent=fake"', 'rsrs remember --help',
     'rsrs recall remember --titles --json', 'rsrs --client-only --json recall remember --titles --json',
     'rsrs remember "process diary" --importance=trivial', 'rsrs update ' + parent + ' --content "ordinary update"',
     'rsrs update ' + parent + ' --content "--clear-parent"', 'rsrs --addr http://example.invalid recall remember',

@@ -71,8 +71,8 @@ test('archive tools require policy, candidates, real write receipts and readback
   await prime(memory)
   assert.ok(calls.every(args => !args.includes('--json')))
   const before = calls.length
-  for (const suffix of [['--clear-parent'], ['--clear-parent=true'], ['--parent', next], ['--parent=' + next], ['--parent', ''], ['--parent=']]) {
-    await assert.rejects(memory.run({ command: 'update', args: [...update.args, ...suffix] }), /forbidden-memory-option|shown-parent-required/)
+  for (const suffix of [['--importance', 'important'], ['--importance=important'], ['--importance', 'trivial'], ['--clear-parent'], ['--clear-parent=true'], ['--parent', next], ['--parent=' + next], ['--parent', ''], ['--parent=']]) {
+    await assert.rejects(memory.run({ command: 'update', args: [...update.args, ...suffix] }), /forbidden-memory-option|shown-parent-required|importance-update-forbidden/)
   }
   assert.equal(calls.length, before)
   await memory.run({ command: 'update', args: [...update.args, '--parent=' + id] })
