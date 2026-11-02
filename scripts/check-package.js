@@ -10,7 +10,7 @@ assert.equal(pkg.name, '@rsrsai/codex')
 assert.equal(plugin.hooks, './hooks/hooks.json')
 assert.equal(plugin.skills, './skills/')
 const hooks = read('hooks/hooks.json').hooks
-for (const name of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
+for (const name of ['SessionStart', 'UserPromptSubmit', 'Stop', 'PreToolUse']) {
   const hook = hooks[name][0].hooks[0]
   assert.equal(hook.type, 'command')
   assert.ok(hook.command.includes('process.env.PLUGIN_ROOT'))
@@ -19,7 +19,7 @@ for (const name of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
 }
 const [packed] = JSON.parse(execFileSync(process.execPath, [process.env.npm_execpath, 'pack', '--dry-run', '--ignore-scripts', '--json'], { encoding: 'utf8' }))
 const files = packed.files.map(file => file.path)
-for (const file of ['.codex-plugin/plugin.json', 'hooks/hooks.json', 'lib/hook.js', 'lib/memory.js', 'lib/rsrs.js', 'lib/state.js', 'lib/codex.js', 'lib/archive.js', 'lib/archive-context.js', 'lib/visibility.js', 'lib/settings.js', 'skills/settings/SKILL.md', 'skills/setup/SKILL.md', 'README.md', 'LICENSE']) assert.ok(files.includes(file), file)
+for (const file of ['.codex-plugin/plugin.json', 'hooks/hooks.json', 'lib/hook.js', 'lib/write-guard.js', 'lib/memory.js', 'lib/rsrs.js', 'lib/state.js', 'lib/codex.js', 'lib/archive.js', 'lib/archive-context.js', 'lib/visibility.js', 'lib/settings.js', 'skills/settings/SKILL.md', 'skills/setup/SKILL.md', 'README.md', 'LICENSE']) assert.ok(files.includes(file), file)
 for (const field of ['logo', 'logoDark', 'composerIcon', 'composerIconDark']) {
   const path = plugin.interface[field]
   assert.ok(typeof path === 'string' && path.startsWith('./assets/'), field)

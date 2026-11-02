@@ -70,6 +70,13 @@ test('archive tools require policy, candidates, real write receipts and readback
   await assert.rejects(memory.run(update), /read-before-write/)
   await prime(memory)
   assert.ok(calls.every(args => !args.includes('--json')))
+  const before = calls.length
+  for (const suffix of [['--importance', 'important'], ['--importance=important'], ['--importance', 'trivial'], ['--clear-parent'], ['--clear-parent=true'], ['--parent', next], ['--parent=' + next], ['--parent', ''], ['--parent=']]) {
+    await assert.rejects(memory.run({ command: 'update', args: [...update.args, ...suffix] }), /forbidden-memory-option|shown-parent-required|importance-update-forbidden/)
+  }
+  assert.equal(calls.length, before)
+  await memory.run({ command: 'update', args: [...update.args, '--parent=' + id] })
+  await memory.run(read('show'))
   await memory.run(update)
   assert.throws(() => memory.finish(JSON.stringify({ result: 'stored', ids: [id] })), /archive-unverified/)
   await memory.run(read('show'))

@@ -1,6 +1,12 @@
 {
   "description": "Respire uses the existing host rsrs runtime; review these hooks before trusting them.",
   "hooks": {
+    "PreToolUse": [{ "matcher": "Bash|mcp__.*__memory_(remember|update)", "hooks": [{
+      "type": "command",
+      "command": "node -e \"import(require('node:url').pathToFileURL(process.env.PLUGIN_ROOT+'/lib/hook.js')).then(m=>m.main({eventName:'PreToolUse'}))\"",
+      "timeout": 10,
+      "statusMessage": "Checking Respire write placement"
+    }] }],
     "SessionStart": [{ "hooks": [{
       "type": "command",
       "command": "node -e \"import(require('node:url').pathToFileURL(process.env.PLUGIN_ROOT+'/lib/hook.js')).then(m=>m.main())\"",
