@@ -122,7 +122,9 @@ test('invalid input, missing data and corrupt state fail without writing memorie
     'rsrs remember "fact"', 'rsrs remember "fact --parent ' + parent + '"',
     'rsrs remember "fact" --parent=', 'rsrs remember "fact" --parent "$parent"',
     'env MODE=x rsrs remember "fact"', 'X=x rsrs remember "fact"', 'command rsrs remember "fact"',
-    '>out rsrs remember fact', 'echo $(rsrs remember fact)', 'echo "$(rsrs remember fact)"',
+    '>out rsrs remember fact', '2>/dev/null rsrs remember fact', 'rsrs >out remember fact --importance important --force',
+    'rsrs 2>/dev/null remember fact', 'rsrs 2>&1 remember fact', 'echo $(rsrs remember fact)', 'echo "$(rsrs remember fact)"',
+    'rsrs remember fact --importance trivial --merge-ids A,B',
     'npx rsrs remember fact', 'command -- rsrs remember fact', 'env -- rsrs remember fact',
     'rsrs --model-task-id audit remember fact', 'rsrs --progress-id=audit remember fact',
     'rsrs remember "fact" --force=false --parent ' + parent,
@@ -152,6 +154,30 @@ test('invalid input, missing data and corrupt state fail without writing memorie
   }
   const timeout = await handleHook({ ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'rsrs update ' + parent + ' --parent ' + parent } }, { call: async () => { throw new Error('timeout') } })
   assert.equal(timeout.hookSpecificOutput.permissionDecision, 'deny')
+  const target = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  for (const currentParent of ['', 'not-an-id', parent]) {
+    const seen = []
+    const result = await handleHook({ ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'rsrs update ' + target + ' --importance=important' } }, {
+      call: async args => {
+        seen.push(args)
+        return { status: 'ok', summary: { id: args[1] }, details: { entry: { id: args[1], content: 'existing body', parent_id: currentParent } } }
+      },
+    })
+    if (currentParent === parent) {
+      assert.deepEqual(result, {})
+      assert.deepEqual(seen, [['show', target], ['show', parent]])
+    } else {
+      assert.equal(result.hookSpecificOutput.permissionDecision, 'deny')
+      assert.match(result.hookSpecificOutput.permissionDecisionReason, /attach.*BEFORE promoting/)
+      assert.deepEqual(seen, [['show', target]])
+    }
+  }
+  const absentParent = await handleHook({ ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'rsrs update ' + target + ' --importance important' } }, {
+    call: async args => args[1] === target
+      ? { status: 'ok', summary: { id: target }, details: { entry: { id: target, content: 'diary', parent_id: parent } } }
+      : { status: 'fail' },
+  })
+  assert.equal(absentParent.hookSpecificOutput.permissionDecision, 'deny')
 })
 
 test('title budgets, malformed envelopes and credential heuristics', () => {
