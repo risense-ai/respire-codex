@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.21
+
+- Migrate the documented engine install entry from the deprecated `@rsrsai/cli` package to `rsrs-cli` in the Chinese README; the `rsrs` command name and this plugin package are unchanged.
+
 ## 0.2.20
 
 - Correct installation and setup guidance to list all four hooks, including PreToolUse. Users MUST personally trust new or changed hooks; an untrusted PreToolUse does not execute. Agents MUST NOT change or bypass that trust.
