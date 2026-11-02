@@ -113,6 +113,45 @@ test('invalid input, missing data and corrupt state fail without writing memorie
   const [file] = await readdir(join(options.dataDir, 'sessions'))
   await writeFile(join(options.dataDir, 'sessions', file), 'invalid')
   await assert.rejects(handleHook({ ...base, turn_id: 'other' }, options), /invalid-state/)
+  const parent = hit.id
+  const requests = []
+  const pre = (command, tool_name = 'Bash', tool_input = { command }) => handleHook({ ...base, hook_event_name: 'PreToolUse', tool_name, tool_input }, {
+    call: async args => { requests.push(args); return { status: 'ok', summary: { id: parent }, details: { entry: { id: parent, content: 'real parent body' } } } },
+  })
+  for (const command of [
+    'rsrs remember "fact"', 'rsrs remember "fact --parent ' + parent + '"',
+    'rsrs remember "fact" --parent=', 'rsrs remember "fact" --parent "$parent"',
+    'env MODE=x rsrs remember "fact"', 'X=x rsrs remember "fact"', 'command rsrs remember "fact"',
+    '>out rsrs remember fact', 'echo $(rsrs remember fact)', 'echo "$(rsrs remember fact)"',
+    'npx rsrs remember fact', 'command -- rsrs remember fact', 'env -- rsrs remember fact',
+    'rsrs --model-task-id audit remember fact', 'rsrs --progress-id=audit remember fact',
+    'rsrs remember "fact" --force=false --parent ' + parent,
+    'rsrs update ' + parent + ' --clear-parent', 'rsrs update ' + parent + ' --clear-parent=true',
+    'rsrs update ' + parent + ' --parent=not-an-id', 'rsrs update ' + parent + ' --parent ""',
+    'echo done && rsrs remember "fact"', 'rsrs remember "$fact" --parent ' + parent,
+    'rsrs remember "fact" --parent ' + parent + ' | cat',
+  ]) assert.equal((await pre(command)).hookSpecificOutput?.permissionDecision, 'deny', command)
+  assert.equal(requests.length, 0)
+  for (const command of [
+    'echo "rsrs remember --force"', "echo '$(rsrs remember fact)'", 'rsrs recall "--force --parent=fake"', 'rsrs remember --help',
+    'rsrs recall remember --titles --json', 'rsrs --client-only --json recall remember --titles --json',
+    'rsrs remember "process diary" --importance=trivial', 'rsrs update ' + parent + ' --content "ordinary update"',
+    'rsrs update ' + parent + ' --content "--clear-parent"', 'rsrs --addr http://example.invalid recall remember',
+    'rsrs remember "fact --force --parent=fake" --parent ' + parent,
+    'rsrs update ' + parent + ' --content "quoted --clear-parent" --parent=' + parent,
+    'rsrs remember fact --parent ' + parent + ' --project project --tags a,b --type context --summary "--force in data"',
+    'rsrs --client-only --json --model-task-id audit --progress-id=audit remember fact --parent ' + parent,
+  ]) assert.deepEqual(await pre(command), {}, command)
+  assert.deepEqual(requests, Array.from({ length: 4 }, () => ['show', parent]))
+  assert.deepEqual(await pre('rsrs remember "fact"', 'apply_patch'), {})
+  for (const tool of ['mcp__respire__memory_remember', 'mcp__respire__memory_update']) assert.equal((await pre('', tool, { content: 'fact', parent, force: true })).hookSpecificOutput.permissionDecision, 'deny')
+  assert.deepEqual(await pre('', 'mcp__respire__memory_recall', { query: 'remember' }), {})
+  for (const doc of [{ status: 'fail' }, { status: 'ok', summary: { id: parent }, details: { entry: { id: 'wrong', content: 'wrong body' } } }]) {
+    const out = await handleHook({ ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'rsrs remember "fact" --parent ' + parent } }, { call: async () => doc })
+    assert.equal(out.hookSpecificOutput.permissionDecision, 'deny')
+  }
+  const timeout = await handleHook({ ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'rsrs update ' + parent + ' --parent ' + parent } }, { call: async () => { throw new Error('timeout') } })
+  assert.equal(timeout.hookSpecificOutput.permissionDecision, 'deny')
 })
 
 test('title budgets, malformed envelopes and credential heuristics', () => {
@@ -171,6 +210,22 @@ test('packaged command runs through the real platform shell with spaces in PLUGI
   child.stdin.end(input)
   await new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(Error(`exit ${code}`))) })
   assert.equal(stdout.trim(), '')
+  const guardCommand = hooks.hooks.PreToolUse[0].hooks[0].command
+  const guard = exec(guardCommand, { shell: process.platform === 'win32' ? 'powershell.exe' : '/bin/sh', env: { ...process.env, PLUGIN_ROOT: resolve(options.dataDir), PLUGIN_DATA: options.dataDir }, windowsHide: true, timeout: 10000 })
+  let denied = ''
+  guard.stdout.on('data', data => { denied += data })
+  guard.stdin.end(JSON.stringify({ ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'rsrs remember "missing parent"' } }))
+  await new Promise((resolve, reject) => { guard.on('error', reject); guard.on('close', code => code === 0 ? resolve() : reject(Error('guard exit ' + code))) })
+  assert.equal(JSON.parse(denied).hookSpecificOutput.permissionDecision, 'deny')
+  for (const input of ['not-json', JSON.stringify({ ...base, prompt: 'x'.repeat(1024 * 1024) }), JSON.stringify({ ...base, hook_event_name: 'Stop' })]) {
+    const failed = exec(guardCommand, { shell: process.platform === 'win32' ? 'powershell.exe' : '/bin/sh', env: { ...process.env, PLUGIN_ROOT: resolve(options.dataDir), PLUGIN_DATA: options.dataDir }, windowsHide: true, timeout: 10000 })
+    let output = ''
+    failed.stdout.on('data', chunk => { output += chunk })
+    failed.stdin.on('error', error => { if (error.code !== 'EPIPE') throw error })
+    failed.stdin.end(input)
+    await new Promise((resolve, reject) => { failed.on('error', reject); failed.on('close', code => code === 0 ? resolve() : reject(Error('guard exit ' + code))) })
+    assert.equal(JSON.parse(output).hookSpecificOutput.permissionDecision, 'deny')
+  }
 })
 
 

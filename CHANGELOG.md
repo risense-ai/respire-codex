@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.19
+
+- Reject background update parent clearing and require every explicit replacement parent to have been shown, including equals-form options. Ordinary updates and process diaries keep their existing paths.
+- Add a deny-only PreToolUse guard for directly identified rsrs remember/update shell commands: block force, parent clearing, missing important parents, unverifiable parents, and compound or dynamic writes. Parent checks use the existing client-only read path; failed checks never start the runtime or authorize a write.
+- Deny recognized actual MCP memory_remember / memory_update calls whose target cannot be verified. Other MCP protocols, scripts, aliases, and write_stdin are outside this guard; engine enforcement remains necessary.
+- Extend existing executor and real-shell hook checks without adding test files. Preserve the host's permissions; successful inspection returns no allow decision.
+
 ## 0.2.18
 
 - Replace empty lock files with atomically installed owner-marked directories; recover confirmed dead owners without deleting a replacement owner's lock.
