@@ -319,10 +319,15 @@ Integrated from [PR #2](https://github.com/risense-ai/respire-codex/pull/2), ada
   not user text, recalled titles, or passwords. Each
   session retains the latest 32 turns. Older replays may not be deduplicated;
   do not replay historical storage events.
-- State updates use locks and atomic replacement. A `.lock` left by a crash
-  causes subsequent recall/storage in that session to report failure and skip.
-  After confirming that session's hooks have stopped, remove its lock file or
-  start a new session. Clearing state loses deduplication records.
+- State updates use owner-marked lock directories and atomic replacement. Dead
+  owners on the same host are recovered automatically; foreign, live or unverifiable
+  owners are preserved, and age alone never permits recovery.
+  Recall runs outside the lock, so it does not block Stop progress. Interrupted
+  turns and running archives remain deduplicated and are not retried automatically.
+- Legacy `.lock` files have no verifiable directory ownership and report
+  `state-legacy-lock`, regardless of age or content. After confirming all session
+  hooks have stopped, remove only the lock file. Keep the session JSON because
+  clearing it loses deduplication. Never run old and new versions together.
 - Common credential patterns are skipped, but this is not a complete secret
   scanner. Remove sensitive content before submitting it.
 - Injected titles and storage receipts enter Codex context and may reach the

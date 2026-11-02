@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.18
+
+- Replace empty lock files with atomically installed owner-marked directories; recover confirmed dead owners without deleting a replacement owner's lock.
+- Recover only confirmed dead owners on the same host. Preserve foreign, live and unverifiable owners; legacy lock files always require manual confirmation regardless of age.
+- Persist explicit storage's pending intent with turn registration so concurrent duplicate events consistently receive the pending handoff.
+- Run recall outside the session state lock, then merge only the current turn into freshly loaded state so concurrent Stop progress and results are preserved.
+- Report state-busy explicitly without hiding it behind hook-failed; interrupted turns and running archives remain deduplicated and are never retried automatically.
+
 ## 0.2.17
 
 - Preserve mandatory candidate, parent and read-back requirements with explicit MUST/ONLY AFTER language.
